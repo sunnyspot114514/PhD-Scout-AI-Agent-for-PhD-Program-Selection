@@ -84,15 +84,24 @@ python main.py
 
 The agent will generate an phd_report.html file and automatically open it in your browser.
 
-The "Human-in-the-Loop" Philosophy
+Human-in-the-Loop Philosophy
 
-During development, I encountered an edge case with UTSA (University of Texas at San Antonio). My agent initially reported "No Duolingo Accepted" because the info was hidden inside a JavaScript dropdown menu that the crawler missed.
+While testing the agent, I ran into an interesting case with UTSA (University of Texas at San Antonio).
+The tool originally said “Duolingo not accepted,” but the requirement was actually hidden inside a JavaScript dropdown, so the crawler didn’t catch it.
 
-Lesson Learned: AI is a powerful filter, not a final decision-maker.
+This showed me something important:
 
-Design Choice: The tool provides a source_url for every claim.
+AI can narrow options fast, but it shouldn’t make the final call.
 
-Workflow: I use this tool to filter the top 10% of programs, but I manually verify the final shortlist before paying application fees.
+So I designed the tool with this workflow in mind:
+
+Every result includes a source_url so you can quickly double-check it.
+
+Use the agent to filter down to the top 10–15% of programs.
+
+Do a manual verification before applying or paying any fees.
+
+Simple rule: let AI speed up the search, but keep a human in the final loop.
 
 Star History
 
