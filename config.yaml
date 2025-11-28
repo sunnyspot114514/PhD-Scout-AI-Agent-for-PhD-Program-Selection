@@ -1,0 +1,27 @@
+# ==========================================
+#  User Profile (Applicant Background)
+# ==========================================
+profile:
+  gpa: "3.0/5.0"
+  paper: "One EI conference paper on Robot Path Planning"
+  english_test: "Duolingo English Test (Target: 125+)"
+  research_interest: "Embodied AI, Robotics, Reinforcement Learning, Agentic Systems"
+  target_degree: "Ph.D. in Computer Science"
+  preferences: "US Schools. Need Full Funding. Open to public universities with strong research groups."
+
+# ==========================================
+#  Manual Targets (Schools you already know)
+# ==========================================
+manual_targets:
+  - "University of Texas at Dallas"
+  - "University of Texas at San Antonio"
+  - "Stevens Institute of Technology"
+  - "University of California, Riverside"
+
+# ==========================================
+#  Agent Settings
+# ==========================================
+settings:
+  recommendation_count: 5  # Number of schools AI should recommend
+  max_search_results: 3    # Depth of Tavily search per school
+  report_language: "Chinese" # Options: "English", "Chinese"
