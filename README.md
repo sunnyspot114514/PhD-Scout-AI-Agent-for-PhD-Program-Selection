@@ -48,8 +48,9 @@ Quick Start
 
 Clone the repo
 
-git clone [https://github.com/yourusername/PhD-Scout.git](https://github.com/yourusername/PhD-Scout.git)
-cd PhD-Scout
+git clone [https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git](https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git)
+cd PhD-Scout-AI-Agent-for-PhD-Program-Selection
+
 
 
 
@@ -93,6 +94,9 @@ Design Choice: The tool provides a source_url for every claim.
 
 Workflow: I use this tool to filter the top 10% of programs, but I manually verify the final shortlist before paying application fees.
 
+Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection&type=Date)](https://star-history.com/#sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection&Date)
 
 Created by 
 

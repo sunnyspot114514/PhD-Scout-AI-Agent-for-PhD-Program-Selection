@@ -35,7 +35,8 @@ PhD-Scout: AI-Powered Research & Admission Agent
 
 bash
 12
-git clone https://github.com/yourusername/PhD-Scout.gitcd PhD-Scout
+git clone [https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git](https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git)
+cd PhD-Scout-AI-Agent-for-PhD-Program-Selection
 
 安装依赖
 
