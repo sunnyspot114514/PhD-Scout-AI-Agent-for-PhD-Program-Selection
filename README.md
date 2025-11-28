@@ -1,6 +1,6 @@
 PhD-Scout: AI-Powered Research & Admission Agent
 
-🇺🇸 English | 🇨🇳 中文说明
+[🇺🇸 English](README.md) | [🇨🇳 中文说明](README.zh-CN.md)
 
 A "Human-in-the-Loop" AI Agent designed to automate the discovery of Ph.D. programs, verify admission requirements (DET/Funding), and quantify research fit.
 

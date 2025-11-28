@@ -1,6 +1,6 @@
 PhD-Scout: AI-Powered Research & Admission Agent
 
-🇺🇸 English | 🇨🇳 中文说明
+[🇺🇸 English](README.md) | [🇨🇳 中文说明](README.zh-CN.md)
 
 <a name="chinese"></a>
 
