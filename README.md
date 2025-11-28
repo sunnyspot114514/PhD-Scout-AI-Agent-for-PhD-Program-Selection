@@ -98,6 +98,6 @@ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection&type=Date)](https://star-history.com/#sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection&Date)
 
-Created by $$Sunny99$$
+Created by Sunny99
 
  - 2025 PhD Applicant
