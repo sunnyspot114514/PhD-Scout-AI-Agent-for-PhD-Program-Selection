@@ -108,7 +108,7 @@ streamlit run app.py
 
 # 输出示例
 
-![screenshot]./assets/demo_report_chinese.png
+![screenshot](./assets/demo_report_chinese.png)
 
 # 人机协同设计
 在测试过程中，德克萨斯大学圣安东尼奥分校（UTSA）出现了一个问题：

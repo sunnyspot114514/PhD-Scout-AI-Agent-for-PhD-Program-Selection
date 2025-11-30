@@ -138,7 +138,7 @@ http://localhost:8501
 
 # Report Example
 
-![screenshot]./assets/demo_report_english.png
+![screenshot](./assets/demo_report_english.png)
 
 # Human-in-the-Loop Design
 
