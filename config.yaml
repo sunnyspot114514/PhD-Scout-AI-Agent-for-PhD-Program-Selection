@@ -24,4 +24,4 @@ manual_targets:
 settings:
   recommendation_count: 5  # Number of schools AI should recommend
   max_search_results: 3    # Depth of Tavily search per school
-  report_language: "Chinese" # Options: "English", "Chinese"
+  report_language: "English" # Options: "English", "Chinese"

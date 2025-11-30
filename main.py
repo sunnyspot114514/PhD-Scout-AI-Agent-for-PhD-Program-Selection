@@ -3,12 +3,21 @@ import json
 import yaml
 import pandas as pd
 import webbrowser
+import concurrent.futures
+import re
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from pydantic import BaseModel, Field
+
+# 引入免费的官方学术 API
+try:
+    from semanticscholar import SemanticScholar
+except ImportError:
+    print("[Error] 找不到 semanticscholar 库，请运行 pip install semanticscholar")
+    exit()
 
 # --- 1. 初始化配置 ---
 load_dotenv()
@@ -19,282 +28,356 @@ def load_config():
         with open("config.yaml", "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        print("[错误]: 找不到 config.yaml 文件。请确保它在根目录下。")
+        print("[Error] 找不到 config.yaml 文件。")
         exit()
 
-config = load_config()
-USER_PROFILE = config['profile']
-MANUAL_TARGETS = config['manual_targets']
-SETTINGS = config['settings']
-LANG = SETTINGS.get('report_language', 'English')  # 获取语言设置
-
-# --- 2. 初始化 LLM 和工具 ---
-api_key = os.getenv("LLM_API_KEY")
-base_url = os.getenv("LLM_BASE_URL")
-model_name = os.getenv("LLM_MODEL_NAME", "gpt-4o-mini")
-
-if not api_key:
-    raise ValueError("[警告] 请在 .env 文件中设置 LLM_API_KEY！")
-
-print(f"[Info] 初始化 Agent 模型: {model_name}")
-print(f"[Info] 报告语言设置为: {LANG}")
-
-llm = ChatOpenAI(
-    model=model_name,
-    api_key=api_key,
-    base_url=base_url,
-    temperature=0.3
-)
-
-search_tool = TavilySearchResults(max_results=SETTINGS['max_search_results'])
+# --- 2. 初始化引擎 (封装为函数) ---
+def init_services(api_key, base_url, model_name="gpt-4o-mini", sch_api_key=None):
+    if not api_key:
+        raise ValueError("[Error] API Key is missing!")
+    
+    llm = ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url, temperature=0.3)
+    web_tool = TavilySearchResults(max_results=3)
+    
+    # 初始化 Semantic Scholar
+    sch_engine = SemanticScholar(api_key=sch_api_key)
+    
+    return llm, web_tool, sch_engine
 
 # --- 3. 定义数据结构 ---
 class SchoolReport(BaseModel):
-    school_name: str = Field(description="Name of the university")
-    source: str = Field(description="'Manual Target' or 'AI Recommendation'")
+    school_name: str = Field(description="Name of the university (Keep English)")
+    source: str = Field(description="Source of this entry")
     accept_det: str = Field(description="Yes/No/Mentioned")
-    funding_policy: str = Field(description="Full funding guaranteed?")
-    best_match_professor: str = Field(description="Professor name")
+    funding_policy: str = Field(description="Full funding policy summary")
+    best_match_professor: str = Field(description="Professor name (Keep English)")
     research_fit_score: int = Field(description="0-100 score")
-    match_reason: str = Field(description="Reason for fit")
+    match_reason: str = Field(description="Detailed reason for fit (Translate to target language)")
+    red_flags: str = Field(description="Potential risks (Translate to target language) or 'None'")
     source_url: str = Field(description="Verification URL")
 
-# --- 4. 动态定义 Prompts (关键修改) ---
+# --- 4. 定义 Prompts (封装为函数) ---
+def get_prompts(language="English"):
+    if language == "Chinese":
+        recommender_template = """
+        你是一个资深的CS博士留学顾问。
+        用户背景: {profile}
+        已排除学校: {manual_list}
+        任务：补充推荐 {count} 所适合该背景的美国学校。
+        要求：仅输出一个 JSON 学校英文名列表。例如: ["School A", "School B"]
+        """
+        
+        analyzer_template = """
+        你是一个博士申请侦察兵。请结合【网页搜索】和【学术搜索】的结果进行分析。
+        
+         **核心指令：请扮演一名专业的中文翻译。**
+        除了【学校名】、【教授名】、【论文标题】、【会议名(如CVPR)】保留英文外，
+        **其他所有描述性文字（包括匹配理由、奖学金政策、避坑预警）必须翻译成流畅的中文。**
+        
+        用户兴趣: {interest}
+        目标学校: {school_name}
 
-if LANG == "Chinese":
-    # === 中文提示词 ===
-    recommender_template = """
-    你是一个资深的CS博士留学顾问。
-    用户背景: {profile}
-    已排除学校: {manual_list}
+        【Web Search (行政/口碑)】:
+        {web_context}
 
-    任务：补充推荐 {count} 所适合该背景（特别是GPA和科研方向）的美国学校。
-    要求：仅输出一个 JSON 学校英文名列表。例如: ["School A", "School B"]
-    """
+        【Semantic Scholar (学术论文)】:
+        {academic_context}
+
+        任务细节：
+        1. **硬指标**: 确认 DET (多邻国) 和 全奖政策。
+        2. **导师匹配**: 寻找最匹配的导师。如果论文发表在顶级会议(CVPR, NeurIPS等)，请加分。
+        3. **匹配理由**: 必须用**中文**解释。
+           -  正确: "该教授在视觉导航领域发表了多篇 CVPR 论文，与你的背景高度契合。"
+           -  错误: "His research is about Visual Navigation."
+        4. **避坑预警**: 检查是否有负面评价。如果有，用中文写出；如果没有，填 "无"。
+
+        请严格输出 JSON 格式:
+        {format_instructions}
+        """
+    else:
+        recommender_template = """
+        You are a Ph.D. admissions consultant.
+        User Profile: {profile}
+        Excluded: {manual_list}
+        Task: Recommend {count} US universities fitting the profile.
+        Output: JSON list of names only.
+        """
+        
+        analyzer_template = """
+        You are a Ph.D. scout. Analyze using search results.
+        Output strictly in **English**.
+
+        User Interest: {interest}
+        School: {school_name}
+
+        [Contexts]:
+        {web_context}
+        {academic_context}
+
+        Task:
+        1. Verify DET and Funding.
+        2. Identify Best Match Professor (Bonus for top-tier venues like CVPR/NeurIPS).
+        3. **Match Reason**: Explain the fit in English. Cite specific paper titles.
+        4. **Red Flags**: Summarize negative sentiment in English; otherwise "None".
+
+        Strict JSON Output:
+        {format_instructions}
+        """
+
+    recommender_prompt = ChatPromptTemplate.from_template(recommender_template)
+    analyzer_prompt = ChatPromptTemplate.from_template(analyzer_template)
     
-    analyzer_template = """
-    你是一个博士申请侦察兵。请完全使用**中文**进行分析和输出（除了人名和专有名词）。
-    用户背景/兴趣: {interest}
-    目标学校: {school_name}
-
-    搜索结果上下文:
-    {context}
-
-    任务:
-    1. 确认该校CS PhD是否接受 Duolingo (DET)。
-    2. 确认 Funding 政策。
-    3. 寻找与用户方向 ({interest}) 匹配的导师并打分 (0-100)。
-    4. **match_reason** 字段必须用**中文**详细解释为什么匹配。
-
-    请严格输出 JSON 格式:
-    {format_instructions}
-    """
-
-else:
-    # === English Prompts ===
-    recommender_template = """
-    You are a senior Ph.D. admissions consultant.
-    User Profile: {profile}
-    Excluded Schools: {manual_list}
-
-    Task: Recommend {count} US universities that fit the profile (considering GPA and research match).
-    Requirement: Output ONLY a JSON list of school names. E.g. ["School A", "School B"]
-    """
-    
-    analyzer_template = """
-    You are a Ph.D. application scout. Please analyze and output **Strictly in English**.
-    User Interest: {interest}
-    School: {school_name}
-
-    Search Context:
-    {context}
-
-    Task:
-    1. Check if Duolingo (DET) is accepted.
-    2. Check for Full Funding policies.
-    3. Find the best matching professor for the user's interest and assign a fit score (0-100).
-    4. The **match_reason** field MUST be written in **English**.
-
-    Strict JSON Output:
-    {format_instructions}
-    """
-
-# 生成 Prompt 对象
-recommender_prompt = ChatPromptTemplate.from_template(recommender_template)
-analyzer_prompt = ChatPromptTemplate.from_template(analyzer_template)
+    return recommender_prompt, analyzer_prompt
 
 # --- 5. 核心功能函数 ---
 
-def get_ai_recommendations():
-    """调用 AI 获取推荐学校列表"""
-    msg = "[Agent 1]: Generating recommendations..." if LANG != "Chinese" else "[Agent 1]: 正在根据背景生成推荐名单..."
+def get_academic_papers(school_name, interest, sch_engine):
+    """使用 Semantic Scholar 官方库搜索相关论文"""
+    try:
+        results = sch_engine.search_paper(
+            query=f"{school_name} computer science {interest}",
+            limit=4,
+            fields=['title', 'abstract', 'venue', 'year', 'authors']
+        )
+        
+        context = ""
+        if not results:
+            return "No specific papers found via Semantic Scholar."
+            
+        for i, paper in enumerate(results):
+            title = paper.title if paper.title else "Unknown Title"
+            venue = paper.venue if paper.venue else "Unknown Venue"
+            year = paper.year if paper.year else "N/A"
+            abstract = paper.abstract if paper.abstract else "No abstract available"
+            
+            authors_list = [author.name for author in paper.authors[:3]] if paper.authors else []
+            authors = ", ".join(authors_list)
+            
+            context += f"[{i+1}] {title} ({venue}, {year})\nAuthors: {authors}\nAbstract: {abstract[:150]}...\n\n"
+        
+        return context
+    except Exception as e:
+        return f"Academic search error: {str(e)[:100]}"
+
+def get_ai_recommendations(llm, recommender_prompt, profile, manual_list, count, language="English"):
+    msg = "[Agent 1]: Generating recommendations..." if language != "Chinese" else "[Agent 1]: 正在生成推荐名单..."
     print(f"\n{msg}")
-    
     chain = recommender_prompt | llm | StrOutputParser()
     try:
         result = chain.invoke({
-            "profile": str(USER_PROFILE), 
-            "manual_list": str(MANUAL_TARGETS),
-            "count": SETTINGS['recommendation_count']
+            "profile": str(profile), 
+            "manual_list": str(manual_list),
+            "count": count
         })
         result = result.replace("```json", "").replace("```", "").strip()
         school_list = json.loads(result)
-        
-        msg_done = f"[AI Suggested]: {school_list}" if LANG != "Chinese" else f"[AI 建议关注]: {school_list}"
-        print(msg_done)
+        print(f"    AI Suggestions: {school_list}")
         return school_list
-    except Exception as e:
-        print(f"[Error]: {e}")
+    except:
         return []
 
-def analyze_school(school_name, source_type):
-    """调用 Tavily 和 AI 分析特定学校"""
-    msg = f"[Agent 2]: Scouting {school_name} ({source_type})..." if LANG != "Chinese" else f"[Agent 2]: 正在侦察 {school_name} ({source_type})..."
+def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch_engine, interest):
+    msg = f"Scouting: {school_name}"
     print(msg)
     
     try:
-        # 搜索查询保持英文以提高准确率
-        query = f"{school_name} Computer Science PhD admission requirements Duolingo funding faculty research interests {USER_PROFILE['research_interest']}"
-        search_results = search_tool.invoke(query)
-        
-        context_text = "\n".join([f"Source: {res['url']}\nContent: {res['content']}" for res in search_results])
+        web_query = f"{school_name} Computer Science PhD admission requirements Duolingo funding student sentiment"
+        web_results = web_tool.invoke(web_query)
+        web_context = "\n".join([f"Source: {res['url']}\nContent: {res['content']}" for res in web_results])
+
+        academic_context = get_academic_papers(school_name, interest, sch_engine)
 
         parser = JsonOutputParser(pydantic_object=SchoolReport)
         chain = analyzer_prompt | llm | parser
         
         result = chain.invoke({
             "school_name": school_name,
-            "interest": USER_PROFILE['research_interest'],
-            "context": context_text,
+            "interest": interest,
+            "web_context": web_context,
+            "academic_context": academic_context,
             "format_instructions": parser.get_format_instructions()
         })
         
         result['source'] = source_type
-        if not result.get('source_url'): 
-            result['source_url'] = "N/A"
+        if not result.get('source_url'): result['source_url'] = "N/A"
             
-        print(f"   [Done] Score: {result.get('research_fit_score')} - Prof: {result.get('best_match_professor')}")
+        print(f"    {school_name} Done! Score: {result.get('research_fit_score')}")
         return result
 
     except Exception as e:
-        print(f"   [Failed]: {e}")
-        return {
-            "school_name": school_name, "source": source_type,
-            "accept_det": "Error", "funding_policy": "Error",
-            "best_match_professor": "Error", "research_fit_score": 0,
-            "match_reason": str(e), "source_url": "N/A"
-        }
+        print(f"    {school_name} Failed: {e}")
+        return None
+
+def clean_text_for_chinese(text):
+    """简单的后处理，将常见英文关键词替换为中文"""
+    if not isinstance(text, str): return text
+    replacements = {
+        "Yes": "是", "No": "否", "Mentioned": "提及",
+        "Full funding guaranteed": "全额奖学金",
+        "Fully Funded": "全额奖学金",
+        "Not specified": "未明确",
+        "None": "无", "Safe": "无风险"
+    }
+    for eng, chn in replacements.items():
+        if text.lower() == eng.lower():
+            return chn
+    return text
 
 def generate_html_report(df, language="English"):
-    """生成静态 HTML 报告"""
-    
+    """生成 HTML 报告 (修复排版与列错位)"""
     if language == "Chinese":
-        title = "PhD-Scout 战略分析报告"
-        subtitle = f"生成时间: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}<br>目标方向: {USER_PROFILE['research_interest']}"
-        headers = ["学校名称", "来源", "契合度", "多邻国?", "全奖?", "推荐导师", "匹配理由", "验证链接"]
-        summary_template = "共扫描了 <b>{total}</b> 所学校。其中 <b>{high_fit}</b> 所学校的科研契合度超过 80 分。建议优先关注这些项目。"
-        table_title = "详细数据表"
-    else:
-        title = "PhD-Scout Strategy Report"
-        subtitle = f"Generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}<br>Target Area: {USER_PROFILE['research_interest']}"
-        headers = ["School", "Source", "Fit Score", "DET Accepted?", "Funding?", "Best Match Prof", "Match Reason", "Source URL"]
-        summary_template = "Scanned a total of <b>{total}</b> schools. Found <b>{high_fit}</b> schools with a research fit score over 80. These should be your top priority."
-        table_title = "Detailed Data Table"
-
-    display_df = df.copy()
-    
-    def format_link(url):
-        if url and url != "N/A":
-            return f'<a href="{url}" target="_blank">Link</a>'
-        return "N/A"
-    
-    display_df['source_url'] = display_df['source_url'].apply(format_link)
-    
-    def format_score(score):
-        try:
-            s = int(score)
-            color = "#28a745" if s >= 80 else "#333" if s >= 60 else "#dc3545"
-            weight = "bold" if s >= 80 else "normal"
-            return f'<span style="color:{color}; font-weight:{weight}">{s}</span>'
-        except:
-            return score
+        title, table_title = "PhD-Scout 战略分析报告", "详细数据表"
+        # 定义表头顺序
+        headers = ["学校名称", "来源", "契合度", "多邻国?", "全奖?", "推荐导师", "匹配理由", "避坑预警", "链接"]
         
+        # 强制汉化部分字段
+        for col in ['accept_det', 'funding_policy', 'red_flags']:
+            df[col] = df[col].apply(clean_text_for_chinese)
+    else:
+        title, table_title = "PhD-Scout Strategy Report", "Detailed Data Table"
+        headers = ["School", "Source", "Fit Score", "DET Accepted?", "Funding?", "Best Match Prof", "Match Reason", "Red Flags", "Link"]
+
+    # 1. 关键修复：强制重排 DataFrame 的列顺序以匹配表头
+    # 这一步解决了“数据错位”的问题
+    correct_order = [
+        'school_name', 
+        'source', 
+        'research_fit_score',  # 契合度 (Fit Score)
+        'accept_det',          # 多邻国? (DET Accepted?)
+        'funding_policy',      # 全奖? (Funding?)
+        'best_match_professor',# 推荐导师 (Best Match Prof)
+        'match_reason',        # 匹配理由 (Match Reason)
+        'red_flags',           # 避坑预警 (Red Flags)
+        'source_url'           # 链接 (Link)
+    ]
+    
+    # 创建显示用的副本，并按正确顺序排列
+    display_df = df[correct_order].copy()
+    
+    # 2. 链接处理
+    display_df['source_url'] = display_df['source_url'].apply(lambda x: f'<a href="{x}" target="_blank">Link</a>' if x and x!="N/A" else "N/A")
+    
+    # 3. 分数高亮
+    def format_score(s):
+        try:
+            val = int(s)
+            return f'<span style="color:{"#28a745" if val>=80 else "#333"}; font-weight:bold">{val}</span>'
+        except: return s
     display_df['research_fit_score'] = display_df['research_fit_score'].apply(format_score)
+    
+    # 4. 避坑预警高亮
+    def format_flags(f):
+        if f and f not in ["None", "无", "N/A", "None mentioned", "无风险"]:
+            return f'<span style="color:#dc3545; font-weight:bold"> {f}</span>'
+        return f'<span style="color:#28a745">Safe</span>'
+    display_df['red_flags'] = display_df['red_flags'].apply(format_flags)
+
+    # 5. 设置表头
     display_df.columns = headers
 
-    high_fit_count = len(df[df['research_fit_score'] >= 80])
-    summary_text = summary_template.format(total=len(df), high_fit=high_fit_count)
+    # 生成表格HTML
     table_html = display_df.to_html(index=False, escape=False, border=0, classes="table-custom")
 
-    html_template = f"""
+    # CSS 修复排版：增加 .table-wrapper 实现横向滚动
+    html = f"""
     <!DOCTYPE html>
     <html lang="{language}">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{title}</title>
         <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f8f9fa; }}
-            .container {{ background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
-            h1 {{ color: #2c3e50; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; margin-bottom: 5px; }}
-            .summary {{ background-color: #e8f5e9; padding: 15px; border-left: 5px solid #4caf50; border-radius: 4px; margin: 20px 0; }}
-            .meta {{ color: #666; font-size: 0.9em; margin-bottom: 20px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th {{ background-color: #007bff; color: white; padding: 12px; text-align: left; position: sticky; top: 0; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f4f6f9; }}
+            .container {{ background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+            h1 {{ border-bottom: 2px solid #eee; padding-bottom: 10px; color: #2c3e50; }}
+            
+            /* 表格容器：关键修复，允许横向滚动 */
+            .table-wrapper {{ overflow-x: auto; margin-top: 20px; border-radius: 8px; border: 1px solid #eee; }}
+            
+            table {{ width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 14px; }}
+            th {{ background: #3498db; color: white; padding: 12px; text-align: left; white-space: nowrap; }}
             td {{ padding: 12px; border-bottom: 1px solid #eee; vertical-align: top; }}
-            tr:hover {{ background-color: #f1f8ff; }}
-            a {{ color: #007bff; text-decoration: none; font-weight: 500; }}
-            a:hover {{ text-decoration: underline; }}
-            .table-wrapper {{ overflow-x: auto; }}
+            tr:hover {{ background: #f1f8ff; }}
+            a {{ color: #3498db; text-decoration: none; }}
+            
+            /* 列宽建议 (非强制，允许浏览器调整) */
+            th:nth-child(7) {{ min-width: 300px; }} /* 匹配理由给宽一点 */
+            th:nth-child(8) {{ min-width: 150px; }} /* 避坑预警 */
         </style>
     </head>
     <body>
         <div class="container">
             <h1>{title}</h1>
-            <div class="meta">{subtitle}</div>
-            <div class="summary">{summary_text}</div>
+            <p>Generated by PhD-Scout (Dual-Engine)</p>
             <h2>{table_title}</h2>
-            <div class="table-wrapper">{table_html}</div>
+            <div class="table-wrapper">
+                {table_html}
+            </div>
         </div>
     </body>
     </html>
     """
+    with open("phd_report.html", "w", encoding="utf-8") as f: f.write(html)
+    return "phd_report.html"
 
-    filename = "phd_report.html"
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(html_template)
-    
-    return filename
-
-# --- 6. 主程序入口 ---
+# --- 6. 主程序 ---
 if __name__ == "__main__":
-    final_list = [{"name": s, "source": "Manual Target"} for s in MANUAL_TARGETS]
+    # 加载配置
+    config = load_config()
+    USER_PROFILE = config['profile']
+    MANUAL_TARGETS = config['manual_targets']
+    SETTINGS = config['settings']
+    LANG = SETTINGS.get('report_language', 'English')
     
-    ai_schools = get_ai_recommendations()
-    for s in ai_schools:
-        final_list.append({"name": s, "source": "AI Recommendation"})
+    # 获取环境变量
+    api_key = os.getenv("LLM_API_KEY")
+    base_url = os.getenv("LLM_BASE_URL")
+    model_name = os.getenv("LLM_MODEL_NAME", "gpt-4o-mini")
+    sch_api_key = os.getenv("SEMANTIC_SCHOLAR_KEY")
+
+    # 初始化服务
+    print(f"[Info] 初始化 Agent 模型: {model_name} (语言: {LANG})")
+    llm, web_tool, sch_engine = init_services(api_key, base_url, model_name, sch_api_key)
+    recommender_prompt, analyzer_prompt = get_prompts(LANG)
+
+    # 汉化硬编码的 Source 标签
+    src_manual = "手动目标" if LANG == "Chinese" else "Manual Target"
+    src_ai = "AI 推荐" if LANG == "Chinese" else "AI Recommendation"
+
+    final_list = [{"name": s, "source": src_manual} for s in MANUAL_TARGETS]
     
-    msg = f"\n[Info] Targets Locked! Scanning {len(final_list)} schools..." if LANG != "Chinese" else f"\n[Info] 目标锁定！即将扫描 {len(final_list)} 所学校..."
+    # 获取 AI 推荐
+    ai_schools = get_ai_recommendations(llm, recommender_prompt, USER_PROFILE, MANUAL_TARGETS, SETTINGS['recommendation_count'], LANG)
+    for s in ai_schools: final_list.append({"name": s, "source": src_ai})
+    
+    msg = f"\n[Info] Parallel Scanning {len(final_list)} schools (Max Workers: 3)..." if LANG != "Chinese" else f"\n[Info] 正在并发扫描 {len(final_list)} 所学校 (最大线程: 3)..."
     print(msg)
     
     results = []
-    for item in final_list:
-        data = analyze_school(item['name'], item['source'])
-        if data:
-            results.append(data)
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        # 注意这里需要传递所有依赖
+        future_to_school = {
+            executor.submit(
+                analyze_school, 
+                item['name'], 
+                item['source'], 
+                llm, 
+                analyzer_prompt, 
+                web_tool, 
+                sch_engine, 
+                USER_PROFILE['research_interest']
+            ): item for item in final_list
+        }
+        for future in concurrent.futures.as_completed(future_to_school):
+            data = future.result()
+            if data: results.append(data)
         
     if results:
-        df = pd.DataFrame(results)
-        df = df.sort_values(by=['research_fit_score'], ascending=False)
+        df = pd.DataFrame(results).sort_values(by=['research_fit_score'], ascending=False)
         df.to_csv("phd_strategy_report.csv", index=False)
-        
-        html_filename = generate_html_report(df, language=LANG)
-        
-        print(f"[Success] Report Generated: {html_filename}")
-        try:
-            file_path = os.path.realpath(html_filename)
-            webbrowser.open(f'file://{file_path}')
-        except:
-            print("Please open the HTML file manually.")
+        report_file = generate_html_report(df, language=LANG)
+        print(f"\n[Success] Report: {report_file}")
+        try: webbrowser.open(f'file://{os.path.realpath(report_file)}')
+        except: pass
     else:
-        print("[Error] No data generated.")
+        print("\n[Error] No data.")

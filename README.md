@@ -2,111 +2,158 @@ PhD-Scout: AI-Powered Research & Admission Agent
 
 [🇺🇸 English](README.md) | [🇨🇳 中文说明](README.zh-CN.md)
 
-A "Human-in-the-Loop" AI Agent designed to automate the discovery of Ph.D. programs, verify admission requirements (DET/Funding), and quantify research fit.
+PhD-Scout is an AI-driven assistant designed to streamline the early-stage search and evaluation of Ph.D. programs.
+It focuses on three essential tasks that typically require extensive manual effort:
 
-<a name="english"></a>
+Identifying programs that align with a specific research background
 
-English Description
+Verifying admission requirements such as Duolingo English Test (DET) acceptance
 
-The Backstory
+Confirming funding policies and other hard constraints
 
-I am currently applying for Computer Science Ph.D. programs in the US. The process involves analyzing hundreds of lab websites, which is repetitive and inefficient. I realized I was wasting hours on:
+This tool was originally developed to support my own Ph.D. application process in Computer Science. It is now released as an open-source project to assist others who face similar challenges.
 
-Checking Duolingo English Test (DET) acceptance (since I am on a tight schedule).
+Background and Motivation
 
-Digging for Full Funding guarantees.
+During the graduate school search process, applicants frequently spend significant time navigating:
 
-Reading faculty profiles to find a true research match.
+Faculty profiles scattered across departmental websites
 
-Generic rankings (US News) are useless for Ph.D. fit. I built this agent to automate the "scouting" phase, allowing me to focus on writing high-quality SOPs for the right schools.
+Inconsistent or hard-to-locate information about required English tests
+
+Funding guarantees that vary by department and institution
+
+The lack of reliable indicators for research compatibility
+
+The inefficiency of manually comparing dozens or hundreds of programs
+
+Traditional rankings (such as US News) provide little insight into actual research fit.
+PhD-Scout aims to address this gap by automating the initial scouting stage, allowing applicants to focus on evaluating a refined, high-quality shortlist and preparing targeted statements of purpose.
 
 Key Features
+1. Hybrid Program Discovery
 
-Hybrid Discovery: Combines your manual target list with AI-driven recommendations based on your specific profile (GPA, Papers, Interests).
+Combines manually specified target programs with AI-generated recommendations based on user background (GPA, publications, research keywords).
 
-Research Fit Scoring: Uses LLMs to semantically analyze faculty research interests and assigns a 0-100 Fit Score.
+2. Research Fit Analysis
 
-Hard Constraint Verification: Crawls admission pages to check for "Hard" requirements like DET acceptance and Funding policies.
+Uses LLM-based semantic matching to evaluate alignment between user research interests and faculty research areas.
+Produces a numerical fit score (0–100) for easier comparison.
 
-The HTML Report: Generates a local interactive HTML report with color-coded scores and direct verification links.
+3. Verification of Hard Constraints
 
-Screenshot
+Automatically checks program webpages for critical admission requirements, including:
 
-![HTML Report Demo](assets/demo_report_english.png)
+Duolingo English Test (DET) acceptance
 
-Tech Stack
+Funding policies
 
-Core: Python, LangChain
+GPA and prerequisite expectations
 
-LLM: DeepSeek-V3 / OpenAI GPT-4o (Configurable)
+Each claim includes a source URL for manual verification.
 
-Search: Tavily API (For real-time web crawling)
+4. Interactive Web Interface (Streamlit)
 
-Visualization: Pandas, HTML/CSS generation
+Provides a user-friendly interface for configuring inputs, running analyses, and exporting results.
+
+5. Configurable Architecture
+
+Supports both CLI and GUI modes.
+Allows customization of:
+
+LLM providers (OpenAI, DeepSeek, etc.)
+
+Search tools (Tavily API)
+
+Program lists and user profiles
+
+Output formats
+
+Technology Stack
+
+Core: Python
+
+Framework: LangChain
+
+LLM Providers: OpenAI GPT-4o, DeepSeek V3 (configurable)
+
+Search Engine: Tavily API
+
+GUI: Streamlit
 
 Quick Start
-
-Clone the repo
-
-git clone [https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git](https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git)
+1. Clone the Repository
+git clone https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git
 cd PhD-Scout-AI-Agent-for-PhD-Program-Selection
 
-
-
-
-Install dependencies
-
+2. Install Dependencies
 pip install -r requirements.txt
 
+3. Configure API Keys
 
+Create a .env file in the project root:
 
-Configure API Keys
-Create a .env file in the root directory:
-
-# LLM Configuration (DeepSeek Example)
-LLM_API_KEY=sk-your-key
-LLM_BASE_URL=[https://api.deepseek.com](https://api.deepseek.com)
+# LLM Configuration
+LLM_API_KEY=your-key
+LLM_BASE_URL=https://api.deepseek.com
 LLM_MODEL_NAME=deepseek-chat
 
 # Search Tool
-TAVILY_API_KEY=tvly-your-key
+TAVILY_API_KEY=your-tavily-key
 
+4. Run the Agent
+Option A: Command Line (CLI)
 
+Edit the config.yaml file
 
-Customize Your Profile
-Edit config.yaml. This is the "brain" of the search. Input your GPA, research interests, and manual targets here.
-
-Run the Agent
+Execute:
 
 python main.py
 
+Option B: Web Interface (GUI)
+streamlit run app.py
 
 
-The agent will generate an phd_report.html file and automatically open it in your browser.
+The application will open at:
 
-Human-in-the-Loop Philosophy
+http://localhost:8501
 
-While testing the agent, I ran into an interesting case with UTSA (University of Texas at San Antonio).
-The tool originally said “Duolingo not accepted,” but the requirement was actually hidden inside a JavaScript dropdown, so the crawler didn’t catch it.
+Human-in-the-Loop Design
 
-This showed me something important:
+During testing, an issue occurred with UTSA (University of Texas at San Antonio).
+The agent reported that DET was not accepted. However, the official information was located inside a JavaScript-rendered dropdown menu that the crawler could not access.
 
-AI can narrow options fast, but it shouldn’t make the final call.
+This revealed an important principle:
 
-So I designed the tool with this workflow in mind:
+AI tools can filter and accelerate research, but manual verification remains necessary for critical decisions.
 
-Every result includes a source_url so you can quickly double-check it.
+For this reason, every automated claim generated by PhD-Scout includes a source URL.
+Users are encouraged to review final results before submitting applications or paying fees.
 
-Use the agent to filter down to the top 10–15% of programs.
+Roadmap
 
-Do a manual verification before applying or paying any fees.
+ Core program search and matching logic
 
-Simple rule: let AI speed up the search, but keep a human in the final loop.
+ Parallel processing for faster crawling
+
+ Bilingual reporting (English/Chinese)
+
+ Streamlit graphical interface
+
+ RAG-based integration using Semantic Scholar for deeper faculty analysis
+
+ Automatic email draft generator for contacting potential advisors
+
+License
+
+This project is released under the MIT License.
+See the LICENSE file for details.
+
 
 Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection&type=Date)](https://star-history.com/#sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection&Date)
 
-Created by Sunny99
+Author
 
- - 2025 PhD Applicant
+Created and maintained by Chen Xiwei, 2025 Ph.D. applicant.

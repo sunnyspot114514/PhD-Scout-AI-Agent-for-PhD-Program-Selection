@@ -1,4 +1,4 @@
-PhD-Scout: AI-Powered Research & Admission Agent
+PhD-Scout：用于博士项目筛选的 AI 助手
 
 [🇺🇸 English](README.md) | [🇨🇳 中文说明](README.zh-CN.md)
 
@@ -6,82 +6,106 @@ PhD-Scout: AI-Powered Research & Admission Agent
 
 中文说明 (Chinese)
 
-为什么做这个工具？
-我正在申请美国的计算机科学博士。整个过程要翻几百个实验室网站，特别重复又费时间。我发现，自己每天都在干这几件事：
+PhD-Scout 是一款 AI 驱动的工具，旨在简化博士项目申请初期的筛选和评估流程。
+它专注于解决三个通常需要大量人工操作的核心任务：
 
-查学校接不接受多邻国（Duolingo）——因为时间紧，不能考托福雅思；
-找有没有全额奖学金（Full Funding）；
-一个个看教授主页，找研究方向真正对得上的导师。
-像 US News 这种排名，对博士申请基本没用。
-所以我做了这个 AI 工具，自动完成前期“侦察”工作，让我能把精力放在写好真正值得投的 SOP 上。
+识别与申请者研究背景高度匹配的博士项目
+验证关键录取要求（例如是否接受 Duolingo 英语测试）
+确认奖学金资助政策及其他硬性条件
+该工具最初是为了辅助我本人申请美国计算机科学博士项目而开发，现作为开源项目发布，希望帮助面临类似挑战的申请者。
 
-主要功能
-智能+手动结合推荐
-你可以自己列目标学校，也能让 AI 根据你的 GPA、论文、兴趣，推荐可能适合你的“冷门宝藏”项目。
-研究匹配打分（0–100 分）
-用大模型分析教授的研究方向，算出你和他/她的匹配度，还会告诉你为什么匹配。
-硬性条件自动查
-自动爬官网，确认学校是否接受多邻国、是否保证全额资助等关键信息。
-生成交互式 HTML 报告
-运行完自动弹出一个网页报告：分数用颜色标出，每条结论都带官网链接，点一下就能核实。
+背景与动机
+在申请博士项目的过程中，申请人往往需要花费大量时间处理以下问题：
 
-用到的技术
-核心：Python + LangChain
-大模型：支持 DeepSeek-V3 或 GPT-4o（可配置）
-网页搜索：Tavily API（实时抓取并整理网页内容）
-报告生成：用 Pandas 处理数据，直接输出漂亮的 HTML 页面
+教授的研究简介分散在各院系网站，难以系统整理
+各校对英语成绩（如 Duolingo）的要求表述不一，甚至隐藏在网页中
+奖学金政策因学校和项目而异，信息不易获取
+缺乏可靠指标判断与教授研究方向的匹配度
+手动比较几十甚至上百个项目的效率极低
+传统的排名（如 US News）对博士申请的实际研究匹配帮助有限。
+PhD-Scout 的目标是自动化“初步筛选”阶段，让申请人能聚焦于高质量的候选项目，从而更高效地撰写有针对性的个人陈述（SOP）。
+
+核心功能
+1. 混合式项目发现
+支持手动指定目标学校，同时基于你的背景（GPA、发表论文、研究关键词）由 AI 推荐潜在匹配的项目。
+
+2. 研究方向匹配度分析
+利用大语言模型（LLM）对你的研究兴趣与教授研究方向进行语义匹配，并给出 0–100 分的匹配分数，便于横向比较。
+
+3. 硬性条件自动验证
+自动抓取项目官网信息，验证以下关键条件：
+
+是否接受 Duolingo 英语测试（DET）
+是否提供全额资助（Full Funding）
+是否有明确的 GPA 或先修课要求
+每项结论均附带原始网页链接，方便你人工复核。
+4. 交互式 Web 界面（可选）
+提供基于 Streamlit 的图形界面，便于配置输入、运行分析和导出结果。
+
+5. 灵活可配置的架构
+支持命令行（CLI）和图形界面（GUI）两种使用方式
+可自定义大模型提供商（如 OpenAI、DeepSeek）
+可替换搜索引擎（默认使用 Tavily API）
+用户资料和目标项目列表可通过配置文件轻松修改
+支持多种输出格式
+技术栈
+核心语言：Python
+框架：LangChain
+大模型支持：OpenAI GPT-4o、DeepSeek V3（可切换）
+网络搜索：Tavily API
+图形界面：Streamlit
 快速开始
-克隆项目
-
+1. 克隆仓库
 bash
 12
-git clone [https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git](https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git)
+git clone https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git
 cd PhD-Scout-AI-Agent-for-PhD-Program-Selection
-
-安装依赖
-
+2. 安装依赖
 bash
 1
-pip install -r requirements.txt
+pip install -r requirements.txt
+3. 配置 API 密钥
+在项目根目录下创建 .env 文件，填入你的密钥：
 
-配置 API 密钥
-在根目录新建一个 .env 文件，填入你的密钥：
-
-env
+ini
 1234567
-# LLM 配置（以 DeepSeek 为例）LLM_API_KEY=sk-你的密钥LLM_BASE_URL=https://api.deepseek.comLLM_MODEL_NAME=deepseek-chat# 搜索工具TAVILY_API_KEY=tvly-你的密钥
+# 大模型配置
+LLM_API_KEY=your-key
+LLM_BASE_URL=https://api.deepseek.com
+LLM_MODEL_NAME=deepseek-chat
 
-填写你的背景信息
-编辑 config.yaml 文件，填上你的 GPA、研究兴趣、想申的学校等。
+# 搜索工具
+TAVILY_API_KEY=your-tavily-key
+4. 运行工具
+方式一：命令行（CLI）
 
-运行
+编辑 config.yaml 文件，填写你的背景信息和目标学校
+运行：
+bash
+1
+方式二：图形界面（GUI）
 
 bash
 1
-python main.py
+程序将在浏览器中打开：http://localhost:8501
 
-程序跑完后，会自动生成 phd_report.html 并在浏览器里打开。
+人机协同设计
+在测试过程中，德克萨斯大学圣安东尼奥分校（UTSA）出现了一个问题：
+智能代理显示该校不接受DET成绩，但官方信息实际位于JavaScript渲染的下拉菜单中，网络爬虫无法抓取该内容。
+这一案例揭示了重要原则：
+人工智能工具能够筛选并加速研究进程，但关键决策仍需人工核查。
+因此，PhD-Scout生成的每项自动化申明均附带来源链接，
+建议用户在提交申请或支付费用前复核最终结果。
 
-截图
+后续计划
+引入并行处理，加速网页抓取
+支持中英双语报告
+集成 Semantic Scholar，通过 RAG 技术深化教授研究分析
+自动生成联系导师的邮件草稿
 
-![HTML Report Demo](assets/demo_report_chinese.png)
-
-“AI 辅助，人工确认”的设计原则
-开发时我遇到一个例子：德州大学圣安东尼奥分校（UTSA）。
-AI 一开始说“不接受多邻国”，因为官网信息藏在一个 JavaScript 下拉菜单里，爬虫没抓到。
-
-这让我明白了一点：AI 只是帮你筛信息的工具，不能代替你做最终判断。
-
-所以这个工具的设计原则是：
-
-所有结论都附带原始链接（source_url），你可以一键点进去核实；
-它帮你从几百个项目里快速找出最有可能的 10%，但最终是否申请，由你亲自确认。
-适合像我一样时间紧、想高效申请 PhD 的人。
-AI 负责干活，你负责决策。
+许可证
+本项目采用 MIT 开源许可证。
+详情请参阅 LICENSE 文件。
 
 
-Created by 
-
-$$Sunny99$$
-
- - 2025 PhD Applicant
+如果你是刚开始准备申请的“小白”，这个工具可以帮助你把精力集中在真正值得申请的项目上，而不是淹没在海量信息中。欢迎使用、反馈和贡献！
