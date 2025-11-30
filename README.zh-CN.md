@@ -81,7 +81,9 @@ PhD-Scout 的目标是自动化“初步筛选”阶段，让申请人能聚焦�
 编辑 config.yaml 文件，填写你的背景信息和目标学校
 运行：
 
- ```python main.py ```
+```python
+python main.py
+```
 
 方式二：图形界面（GUI）
 

@@ -108,7 +108,9 @@ Edit the config.yaml file
 
 Execute:
 
- ```python main.py ```
+```python
+python main.py
+```
 
 Option B: Web Interface (GUI)
 
