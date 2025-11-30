@@ -83,23 +83,23 @@ GUI: Streamlit
 
 Quick Start
 1. Clone the Repository
-git clone https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git
-cd PhD-Scout-AI-Agent-for-PhD-Program-Selection
+ ```git clone https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git ```
+ ```cd PhD-Scout-AI-Agent-for-PhD-Program-Selection ```
 
 2. Install Dependencies
-pip install -r requirements.txt
+ ```pip install -r requirements.txt ```
 
 3. Configure API Keys
 
 Create a .env file in the project root:
 
 # LLM Configuration
-LLM_API_KEY=your-key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL_NAME=deepseek-chat
+ ```LLM_API_KEY=your-key ```
+ ```LLM_BASE_URL=https://api.deepseek.com ```
+ ```LLM_MODEL_NAME=deepseek-chat ```
 
 # Search Tool
-TAVILY_API_KEY=your-tavily-key
+ ```TAVILY_API_KEY=your-tavily-key ```
 
 4. Run the Agent
 Option A: Command Line (CLI)
@@ -108,10 +108,11 @@ Edit the config.yaml file
 
 Execute:
 
-python main.py
+ ```python main.py ```
 
 Option B: Web Interface (GUI)
-streamlit run app.py
+
+ ```streamlit run app.py ```
 
 
 The application will open at:

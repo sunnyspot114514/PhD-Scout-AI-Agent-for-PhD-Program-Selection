@@ -57,37 +57,36 @@ PhD-Scout 的目标是自动化“初步筛选”阶段，让申请人能聚焦�
 
 # 快速开始
 1. 克隆仓库
-bash
-12
-git clone https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git
-cd PhD-Scout-AI-Agent-for-PhD-Program-Selection
+
+ ```git clone https://github.com/sunnyspot114514/PhD-Scout-AI-Agent-for-PhD-Program-Selection.git  ```
+ ```cd PhD-Scout-AI-Agent-for-PhD-Program-Selection ```
 2. 安装依赖
-bash
-1
-pip install -r requirements.txt
+
+ ```pip install -r requirements.txt ```
+
 3. 配置 API 密钥
 在项目根目录下创建 .env 文件，填入你的密钥：
 
-ini
-1234567
 # 大模型配置
-LLM_API_KEY=your-key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL_NAME=deepseek-chat
+ ```LLM_API_KEY=your-key ```
+ ```LLM_BASE_URL=https://api.deepseek.com ```
+ ```LLM_MODEL_NAME=deepseek-chat ```
 
 # 搜索工具
-TAVILY_API_KEY=your-tavily-key
+ ```TAVILY_API_KEY=your-tavily-key ```
+
 4. 运行工具
 方式一：命令行（CLI）
 
 编辑 config.yaml 文件，填写你的背景信息和目标学校
 运行：
-bash
-1
+
+ ```python main.py ```
+
 方式二：图形界面（GUI）
 
-bash
-1
+ ```streamlit run app.py ```
+
 程序将在浏览器中打开：http://localhost:8501
 
 人机协同设计
