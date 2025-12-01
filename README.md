@@ -108,14 +108,6 @@ First, obtain your API keys from the following providers:
 Then, create a `.env` file in the project root:
 
 # LLM Configuration
-LLM_API_KEY=your-key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL_NAME=deepseek-chat
-
-# Search Tool
-TAVILY_API_KEY=your-tavily-key
-
-# LLM Configuration
  
 ```bash
 LLM_API_KEY=your-key
