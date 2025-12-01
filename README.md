@@ -98,7 +98,22 @@ pip install -r requirements.txt
 
 ## 3. Configure API Keys
 
-Create a .env file in the project root:
+First, obtain your API keys from the following providers:
+
+* **DeepSeek API** :  
+    https://platform.deepseek.com/api_keys
+* **Tavily Web Search API** (For real-time school requirements):  
+    https://app.tavily.com/
+
+Then, create a `.env` file in the project root:
+
+# LLM Configuration
+LLM_API_KEY=your-key
+LLM_BASE_URL=https://api.deepseek.com
+LLM_MODEL_NAME=deepseek-chat
+
+# Search Tool
+TAVILY_API_KEY=your-tavily-key
 
 # LLM Configuration
  

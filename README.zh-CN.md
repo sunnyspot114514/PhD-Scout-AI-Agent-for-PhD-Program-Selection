@@ -71,7 +71,14 @@ pip install -r requirements.txt
 
 ## 3. 配置 API 密钥
 
-在项目根目录下创建 .env 文件，填入你的密钥：
+先申请两个必要的API密钥：
+
+**DeepSeek API​** :
+[链接1](https://platform.deepseek.com/api_keys)
+**Tavily 网络搜索 API**​ (用于实时学校信息查询):
+[链接2](https://app.tavily.com/)
+
+然后，在项目根目录下创建 .env 文件，填入你的密钥：
 
 # 大模型配置
 
