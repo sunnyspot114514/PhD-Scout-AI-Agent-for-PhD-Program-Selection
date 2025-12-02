@@ -181,7 +181,11 @@ def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch
     print(msg)
     
     try:
-        web_query = f"{school_name} Computer Science PhD admission requirements Duolingo funding student sentiment"
+        # 关键修改 (方案一): 优化搜索词
+        # 强制搜索 "Graduate Catalog" (目录) 和 "Handbook" (手册)
+        # 这些通常是静态 PDF/纯文本，比花哨的官网更容易抓取 DET 分数
+        web_query = f"{school_name} Computer Science PhD graduate catalog student handbook Duolingo score funding policy"
+        
         web_results = web_tool.invoke(web_query)
         web_context = "\n".join([f"Source: {res['url']}\nContent: {res['content']}" for res in web_results])
 
@@ -216,11 +220,14 @@ def clean_text_for_chinese(text):
         "Full funding guaranteed": "全额奖学金",
         "Fully Funded": "全额奖学金",
         "Not specified": "未明确",
-        "None": "无", "Safe": "无风险"
+        "None": "无", "Safe": "无风险",
+        "Uncertain": "需人工核实", "Check Manually": "需人工核实"
     }
     for eng, chn in replacements.items():
         if text.lower() == eng.lower():
             return chn
+        if eng in text: # 处理包含情况，如 "Uncertain (Check Manually)"
+             text = text.replace(eng, chn)
     return text
 
 def generate_html_report(df, language="English"):

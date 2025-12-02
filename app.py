@@ -20,7 +20,7 @@ UI_TEXT = {
     "English": {
         "sidebar_title": "Settings",
         "api_keys_header": "API Keys",
-        "openai_key_label": "OpenAI API Key",
+        "openai_key_label": "LLM API Key",
         "base_url_label": "Base URL (Optional)",
         "model_name_label": "Model Name",
         "tavily_key_label": "Tavily API Key",
@@ -56,7 +56,7 @@ UI_TEXT = {
     "Chinese": {
         "sidebar_title": "设置",
         "api_keys_header": "API 密钥",
-        "openai_key_label": "OpenAI API Key",
+        "openai_key_label": "LLM API Key",
         "base_url_label": "Base URL (选填)",
         "model_name_label": "模型名称",
         "tavily_key_label": "Tavily API Key",
