@@ -8,30 +8,48 @@ jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
     steps:
+      # 1. 下载代码（开启 LFS，把真实图片下载下来）
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          lfs: true  # 1. 依然开启 LFS 以便从 GitHub 下载图片
+          lfs: true
 
-      - name: Push to hub
+      # 2. 设置 Python 环境
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # 3. 安装 Hugging Face 官方工具 (带 Xet 支持)
+      - name: Install dependencies
+        run: pip install -U huggingface_hub
+
+      # 4. 使用 Python 脚本同步 (核心步骤)
+      - name: Push to Hub via Python SDK
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # 你的 HF 用户名
+          HF_USERNAME: sunny114514
+          # 你的 HF Space 名字
+          HF_SPACE_NAME: PhD-Scout
         run: |
-          # 2. 配置 Git 用户
-          git config --global user.email "104133192+sunnyspot114514@users.noreply.github.com"
-          git config --global user.name "sunnyspot114514"
+          python -c "
+          from huggingface_hub import HfApi
+          import os
 
-          # 3. 【核心修改】安装 git-xet 工具
-          # 使用官方文档提供的安装脚本
-          curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/huggingface/xet-core/refs/heads/main/git_xet/install.sh | sudo sh
-
-          # 4. 在当前仓库初始化 Xet
-          # 这会让 git 知道如何处理大文件
-          git xet install
-
-          # 5. 添加远程仓库
-          git remote add hf https://sunny114514:$HF_TOKEN@huggingface.co/spaces/sunny114514/PhD-Scout
-
-          # 6. 强制推送
-          # 有了 git-xet，普通的 git push 就能自动处理大文件了，不需要手动 git lfs push
-          git push -f hf main                    
+          api = HfApi(token=os.environ['HF_TOKEN'])
+          
+          repo_id = f\"{os.environ['HF_USERNAME']}/{os.environ['HF_SPACE_NAME']}\"
+          
+          print(f'Starting upload to {repo_id}...')
+          
+          # upload_folder 会自动处理大文件、LFS/Xet 以及增量更新
+          api.upload_folder(
+              folder_path='.',
+              repo_id=repo_id,
+              repo_type='space',
+              ignore_patterns=['.git', '.github'] # 忽略 git 自身目录
+          )
+          
+          print('Upload complete!')
+          "
