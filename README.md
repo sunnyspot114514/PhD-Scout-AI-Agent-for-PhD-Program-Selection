@@ -7,29 +7,30 @@
 PhD-Scout is an AI-driven assistant designed to streamline the early-stage search and evaluation of Ph.D. programs.
 It focuses on three essential tasks that typically require extensive manual effort:
 
-Identifying programs that align with a specific research background
+**Identifying programs that align with a specific research background**
 
-Verifying admission requirements such as Duolingo English Test (DET) acceptance
+**Verifying admission requirements such as Duolingo English Test (DET) acceptance**
 
-Confirming funding policies and other hard constraints
+**Confirming funding policies and other hard constraints**
 
 This tool was originally developed to support my own Ph.D. application process in Computer Science. It is now released as an open-source project to assist others who face similar challenges.
 
-Background and Motivation
+## Background and Motivation
 
 During the graduate school search process, applicants frequently spend significant time navigating:
 
-Faculty profiles scattered across departmental websites
+**Faculty profiles scattered across departmental websites**
 
-Inconsistent or hard-to-locate information about required English tests
+**Inconsistent or hard-to-locate information about required English tests**
 
-Funding guarantees that vary by department and institution
+**Funding guarantees that vary by department and institution**
 
-The lack of reliable indicators for research compatibility
+**The lack of reliable indicators for research compatibility**
 
-The inefficiency of manually comparing dozens or hundreds of programs
+**The inefficiency of manually comparing dozens or hundreds of programs**
 
-Traditional rankings (such as US News) provide little insight into actual research fit.
+**Traditional rankings (such as US News) provide little insight into actual research fit.**
+
 PhD-Scout aims to address this gap by automating the initial scouting stage, allowing applicants to focus on evaluating a refined, high-quality shortlist and preparing targeted statements of purpose.
 
 ## Live Demo
