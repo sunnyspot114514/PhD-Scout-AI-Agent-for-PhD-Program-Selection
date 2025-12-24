@@ -1,94 +1,173 @@
+# --- START OF FILE app.py ---
+
 import streamlit as st
 import pandas as pd
 import os
 import yaml
 import concurrent.futures
 from dotenv import load_dotenv
-from main import init_services, get_ai_recommendations, analyze_school, get_prompts, generate_html_report
-
-# Page Config (No Emojis)
-st.set_page_config(
-    page_title="PhD Scout Agent",
-    layout="wide"
+# 引入核心功能
+from main import (
+    init_services, 
+    get_ai_recommendations, 
+    analyze_school, 
+    get_prompts, 
+    generate_html_report, 
+    deduplicate_school_list
 )
 
-# Load Environment Variables (only for internal use if needed, not for UI defaults)
+# Page Config
+st.set_page_config(
+    page_title="PhD Scout Agent",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Load Environment Variables
 load_dotenv()
 
-# --- Language Constants ---
+# --- 1. UI Resources (Language Dictionary) ---
 UI_TEXT = {
     "English": {
+        # Sidebar
         "sidebar_title": "Settings",
-        "api_keys_header": "API Keys",
-        "openai_key_label": "LLM API Key",
-        "base_url_label": "Base URL (Optional)",
+        "provider_label": "LLM Provider",
+        "provider_options": ["OpenAI", "DeepSeek", "Custom/Other"],
+        "api_keys_header": "API Credentials",
+        "openai_key_label": "API Key",
+        "base_url_label": "Base URL",
         "model_name_label": "Model Name",
-        "tavily_key_label": "Tavily API Key",
+        "tavily_key_label": "Tavily Search API Key",
         "sch_key_label": "Semantic Scholar Key (Optional)",
         "load_config_button": "Load from config.yaml",
         "config_loaded_success": "Config loaded successfully!",
         "config_not_found_error": "config.yaml not found.",
-        "main_title": "PhD Scout Agent",
-        "main_subtitle": "AI-driven assistant for finding your perfect Ph.D. program match.",
-        "profile_header": "User Profile",
+        
+        # Header
+        "main_title": "PhD Scout Agent (Ultimate Edition)",
+        "main_subtitle": "AI-driven assistant with Smart Strategy, Deduplication, and Waiver Detection.",
+        
+        # Profile Section
+        "profile_header": "1. User Profile",
+        "major_label": "Target Major / Discipline",
+        "keywords_label": "Core Search Keywords",
+        "keywords_help": "Crucial! E.g., 'Computer Vision' or 'Consumer Behavior'. AI uses this to find specific faculty.",
+        "highest_school_label": "Highest Institution",
+        "highest_school_help": "The university name is used to check for English waiver eligibility.",
+        "current_degree_label": "Current Degree",
+        "current_degree_help": "E.g., M.Sc. Data Science, B.S. Physics.",
         "gpa_label": "GPA",
-        "paper_label": "Publications",
-        "test_label": "English Test",
-        "interest_label": "Research Interest",
+        "paper_label": "Publications / Experience",
+        "test_label": "English Test Score (Backup)",
+        "interest_label": "Specific Research Interests",
         "degree_label": "Target Degree",
-        "preferences_label": "Preferences",
-        "targets_header": "Target Schools",
+        "preferences_label": "Other Preferences",
+        
+        # Strategy Section
+        "targets_header": "2. Targets & Strategy",
+        "target_countries_label": "Target Countries",
         "manual_targets_label": "Manual Targets (One per line)",
         "rec_count_label": "AI Recommendation Count",
-        "start_button": "Start Analysis",
-        "error_missing_key": "Please provide both OpenAI API Key and Tavily API Key.",
-        "status_running": "Running Analysis...",
-        "status_ai_recs": "Generating AI Recommendations...",
-        "status_analyzing": "Analyzing {} schools...",
-        "status_complete": "Analysis Complete!",
-        "results_header": "Analysis Results",
-        "download_csv": "Download CSV",
-        "download_html": "Download HTML Report",
-        "no_results": "No results found.",
-        "rec_item": "Recommended: {}",
-        "analyzed_item": "{} (Score: {})"
+        "strategy_label": "Recommendation Strategy",
+        "strategy_options": [
+            "Balanced (Reputation & Fit)",
+            "Top Tier (Ranking Focus)",
+            "High Match (Research Focus)",
+            "Safety (Funding Focus)"
+        ],
+        
+        # Buttons & Status
+        "start_button": "Start Agent Analysis",
+        "error_missing_key": "Please provide both LLM API Key and Tavily API Key.",
+        "status_running": "Agent is running...",
+        "status_ai_recs": " AI Scouting: Generating school list (Strategy: {})...",
+        "status_deduplicating": " Smart Deduplication: Merging AI & Manual lists...",
+        "status_analyzing": " Deep Analysis: Scanning {} schools for '{}'...",
+        "status_complete": " Analysis Complete!",
+        
+        # Results
+        "results_header": "3. Analysis Report",
+        "download_csv": "Download Data (CSV)",
+        "download_html": "Download Report (HTML)",
+        "no_results": "No results found. Please check your API keys or network.",
+        "analyzed_item": "Scouted: {} (Fit Score: {})",
+        "source_manual": "Manual",
+        "source_ai": "AI Rec"
     },
     "Chinese": {
-        "sidebar_title": "设置",
-        "api_keys_header": "API 密钥",
-        "openai_key_label": "LLM API Key",
-        "base_url_label": "Base URL (选填)",
-        "model_name_label": "模型名称",
-        "tavily_key_label": "Tavily API Key",
+        # Sidebar
+        "sidebar_title": "系统设置",
+        "provider_label": "模型服务商 (LLM Provider)",
+        "provider_options": ["OpenAI", "DeepSeek", "自定义/其他"],
+        "api_keys_header": "API 凭证",
+        "openai_key_label": "API Key (密钥)",
+        "base_url_label": "Base URL (接口地址)",
+        "model_name_label": "模型名称 (Model Name)",
+        "tavily_key_label": "Tavily 搜索 API Key",
         "sch_key_label": "Semantic Scholar Key (选填)",
-        "load_config_button": "从 config.yaml 加载",
+        "load_config_button": "从 config.yaml 加载配置",
         "config_loaded_success": "配置加载成功！",
         "config_not_found_error": "未找到 config.yaml 文件。",
-        "main_title": "PhD 留学申请助手",
-        "main_subtitle": "AI 驱动的博士申请选校助手，助你找到最匹配的项目。",
-        "profile_header": "个人背景",
+        
+        # Header
+        "main_title": "PhD 留学申请助手 (终极版)",
+        "main_subtitle": "AI 驱动的博士申请选校助手。集成智能去重、DeepSeek 支持与免语言判定。",
+        
+        # Profile Section
+        "profile_header": "1. 个人背景 (User Profile)",
+        "major_label": "申请专业/学科",
+        "keywords_label": " 核心搜索词 (关键)",
+        "keywords_help": "非常重要！例如：'Computer Vision' 或 'Consumer Behavior'。AI 将用此词搜索具体的实验室和导师。",
+        "highest_school_label": "最高学历院校",
+        "highest_school_help": "AI 将根据校名判断是否可以豁免语言成绩 (Waiver)。",
+        "current_degree_label": "当前学位 / 所获学位",
+        "current_degree_help": "例如：M.Sc. Data Science, B.S. Physics。",
         "gpa_label": "GPA",
-        "paper_label": "发表论文",
-        "test_label": "英语成绩",
-        "interest_label": "研究方向",
+        "paper_label": "科研经历/发表论文",
+        "test_label": "英语成绩 (备用)",
+        "interest_label": "具体研究方向",
         "degree_label": "申请学位",
-        "preferences_label": "偏好设置",
-        "targets_header": "目标院校",
-        "manual_targets_label": "手动目标 (每行一个)",
-        "rec_count_label": "AI 推荐数量",
-        "start_button": "开始分析",
-        "error_missing_key": "请提供 OpenAI API Key 和 Tavily API Key。",
-        "status_running": "正在运行分析...",
-        "status_ai_recs": "正在生成 AI 推荐...",
-        "status_analyzing": "正在分析 {} 所学校...",
-        "status_complete": "分析完成！",
-        "results_header": "分析结果",
-        "download_csv": "下载 CSV",
-        "download_html": "下载 HTML 报告",
-        "no_results": "未找到结果。",
-        "rec_item": "推荐: {}",
-        "analyzed_item": "{} (得分: {})"
+        "preferences_label": "偏好设置 (地理位置等)",
+        
+        # Strategy Section
+        "targets_header": "2. 目标与策略",
+        "target_countries_label": "目标国家/地区",
+        "manual_targets_label": "手动指定学校 (每行一个)",
+        "rec_count_label": "AI 补充推荐数量",
+        "strategy_label": "AI 选校策略",
+        "strategy_options": [
+            "均衡策略 (平衡综排与匹配度)",
+            "冲刺名校 (关注 Top Tier)",
+            "高匹配/潜力股 (忽视综排，只看方向)",
+            "保底/稳妥 (关注录取率与资金)"
+        ],
+        
+        # Buttons & Status
+        "start_button": " 开始智能分析",
+        "error_missing_key": "错误：请提供 LLM API Key 和 Tavily API Key。",
+        "status_running": "正在启动 Agent...",
+        "status_ai_recs": " AI 侦察中: 正在生成推荐列表 (策略: {})...",
+        "status_deduplicating": " 智能去重: 正在合并手动与 AI 推荐列表...",
+        "status_analyzing": " 深度分析: 正在扫描 {} 所学校 (方向: {})...",
+        "status_complete": " 分析完成！",
+        
+        # Results
+        "results_header": "3. 分析报告",
+        "download_csv": "下载数据 (CSV)",
+        "download_html": "下载完整报告 (HTML)",
+        "no_results": "未找到结果，请检查 API Key 或网络连接。",
+        "analyzed_item": "已分析: {} (匹配分: {})",
+        "source_manual": "手动目标",
+        "source_ai": "AI 推荐"
     }
+}
+
+# --- 2. Strategy Internal Mapping ---
+STRATEGY_MAPPING = {
+    0: "Balanced",
+    1: "Top Tier (冲刺名校)",
+    2: "High Match / Hidden Gems (高匹配/潜力股)",
+    3: "Safety / Safe Bets (保底/稳妥)"
 }
 
 def load_config():
@@ -98,27 +177,89 @@ def load_config():
     return None
 
 # --- Sidebar: Configuration ---
-# Language Selection first
-language = st.sidebar.selectbox("Language / 语言", ["English", "Chinese"], index=1)
+# ⚠️ Key Fixed: 语言选择
+language = st.sidebar.selectbox("Language / 语言", ["English", "Chinese"], index=1, key="app_language")
+
+if "last_lang" not in st.session_state:
+    st.session_state["last_lang"] = language
+
+if st.session_state["last_lang"] != language:
+    st.session_state["last_lang"] = language
+    st.rerun() # 强制立刻刷新页面
+
 text = UI_TEXT[language]
 
 st.sidebar.title(text["sidebar_title"])
 
-# API Keys
+# Provider Selection
 st.sidebar.subheader(text["api_keys_header"])
-# Default values are empty strings as requested
-api_key = st.sidebar.text_input(text["openai_key_label"], value="", type="password")
-base_url = st.sidebar.text_input(text["base_url_label"], value="https://api.openai.com/v1")
-model_name = st.sidebar.text_input(text["model_name_label"], value="gpt-4o-mini")
-tavily_api_key = st.sidebar.text_input(text["tavily_key_label"], value="", type="password")
-sch_api_key = st.sidebar.text_input(text["sch_key_label"], value="", type="password")
+# ⚠️ Key Fixed: 服务商选择
+provider_idx = st.sidebar.selectbox(
+    text["provider_label"], 
+    range(len(text["provider_options"])), 
+    format_func=lambda x: text["provider_options"][x],
+    index=1,
+    key="llm_provider" 
+)
+selected_provider_logic = ["OpenAI", "DeepSeek", "Custom"][provider_idx]
 
-# Load Config Button
-if st.sidebar.button(text["load_config_button"]):
-    config = load_config()
-    if config:
-        st.session_state['config'] = config
+# Auto-fill Logic
+default_base_url = "https://api.openai.com/v1"
+default_model = "gpt-4o-mini"
+if selected_provider_logic == "DeepSeek":
+    default_base_url = "https://api.deepseek.com"
+    default_model = "deepseek-chat"
+elif selected_provider_logic == "Custom":
+    default_base_url = ""
+    default_model = ""
+
+# ⚠️ Keys Fixed for Inputs
+api_key = st.sidebar.text_input(text["openai_key_label"], value="", type="password", key="input_api_key")
+base_url = st.sidebar.text_input(text["base_url_label"], value=default_base_url, key="input_base_url")
+model_name = st.sidebar.text_input(text["model_name_label"], value=default_model, key="input_model_name")
+
+st.sidebar.markdown("---")
+tavily_api_key = st.sidebar.text_input(text["tavily_key_label"], value="", type="password", key="input_tavily_key")
+sch_api_key = st.sidebar.text_input(text["sch_key_label"], value="", type="password", key="input_sch_key")
+
+if st.sidebar.button(text["load_config_button"], key="btn_load_config"):
+    new_config = load_config() # 加载新配置
+    if new_config:
+        # 1. 更新主 config 状态
+        st.session_state['config'] = new_config
+        
+        # 2. 【关键修复】强制更新所有控件绑定的 Session State Key
+        # 如果不加这一步，界面上的输入框不会变
+        
+        # Profile 部分
+        p = new_config.get('profile', {})
+        st.session_state['input_major'] = p.get('major', '')
+        st.session_state['input_keywords'] = p.get('search_keywords', '')
+        st.session_state['input_highest_school'] = p.get('highest_school', '')
+        st.session_state['input_current_degree'] = p.get('current_degree', '')
+        st.session_state['input_gpa'] = str(p.get('gpa', '')) # 确保转为字符串
+        st.session_state['input_paper'] = p.get('paper', '')
+        st.session_state['input_english_test'] = p.get('english_test', '')
+        st.session_state['input_interest'] = p.get('research_interest', '')
+        st.session_state['input_target_degree'] = p.get('target_degree', 'Ph.D.')
+        st.session_state['input_preferences'] = p.get('preferences', '')
+        
+        # Targets 部分
+        # 注意：Multiselect 需要 List，Text Area 需要 String
+        st.session_state['input_countries'] = new_config.get('target_countries', ["United States"])
+        
+        manual_list = new_config.get('manual_targets', [])
+        if isinstance(manual_list, list):
+            st.session_state['input_manual_targets'] = "\n".join(manual_list)
+        else:
+            st.session_state['input_manual_targets'] = str(manual_list)
+            
+        # Settings 部分
+        s = new_config.get('settings', {})
+        st.session_state['input_rec_count'] = int(s.get('recommendation_count', 3))
+
         st.sidebar.success(text["config_loaded_success"])
+        st.rerun() # 强制刷新页面，让输入框读取 Session State 的新值
     else:
         st.sidebar.error(text["config_not_found_error"])
 
@@ -126,81 +267,153 @@ if st.sidebar.button(text["load_config_button"]):
 st.title(text["main_title"])
 st.markdown(text["main_subtitle"])
 
-# Initialize Session State for Config
+# Initialize Session State
 if 'config' not in st.session_state:
     st.session_state['config'] = {
         'profile': {
-            'gpa': '', 'paper': '', 'english_test': '', 'research_interest': '', 'target_degree': 'Ph.D. in CS', 'preferences': ''
+            'major': 'Computer Science', 
+            'search_keywords': '', 
+            'highest_school': '', 'current_degree': '',
+            'gpa': '', 'paper': '', 'english_test': '', 
+            'research_interest': '', 'target_degree': 'Ph.D.', 'preferences': ''
         },
+        'target_countries': ['United States'],
         'manual_targets': [],
         'settings': {'recommendation_count': 3}
     }
 
 config = st.session_state['config']
 
-# User Profile Form
+# --- Section 1: User Profile ---
+# 注意：即使 Label 根据 text[] 变化，key 始终保持不变，这样内容就不会丢失。
 with st.expander(text["profile_header"], expanded=True):
+    col_major1, col_major2 = st.columns(2)
+    with col_major1:
+        major = st.text_input(text["major_label"], 
+            value=config['profile'].get('major', 'Computer Science'),
+            key="input_major")
+    with col_major2:
+        search_keywords = st.text_input(text["keywords_label"], 
+            value=config['profile'].get('search_keywords', ''),
+            help=text["keywords_help"],
+            key="input_keywords")
+
+    col_edu1, col_edu2 = st.columns(2)
+    with col_edu1:
+        highest_school = st.text_input(text["highest_school_label"], 
+            value=config['profile'].get('highest_school', ''), 
+            help=text["highest_school_help"],
+            key="input_highest_school")
+    with col_edu2:
+        current_degree = st.text_input(text["current_degree_label"], 
+            value=config['profile'].get('current_degree', ''),
+            help=text["current_degree_help"],
+            key="input_current_degree")
+            
     col1, col2 = st.columns(2)
     with col1:
-        gpa = st.text_input(text["gpa_label"], value=config['profile'].get('gpa', ''))
-        paper = st.text_area(text["paper_label"], value=config['profile'].get('paper', ''))
-        english_test = st.text_input(text["test_label"], value=config['profile'].get('english_test', ''))
+        gpa = st.text_input(text["gpa_label"], 
+            value=config['profile'].get('gpa', ''), 
+            key="input_gpa")
+        paper = st.text_area(text["paper_label"], 
+            value=config['profile'].get('paper', ''), 
+            key="input_paper")
+        english_test = st.text_input(text["test_label"], 
+            value=config['profile'].get('english_test', ''), 
+            key="input_english_test")
     with col2:
-        research_interest = st.text_area(text["interest_label"], value=config['profile'].get('research_interest', ''))
-        target_degree = st.text_input(text["degree_label"], value=config['profile'].get('target_degree', 'Ph.D. in CS'))
-        preferences = st.text_area(text["preferences_label"], value=config['profile'].get('preferences', ''))
+        research_interest = st.text_area(text["interest_label"], 
+            value=config['profile'].get('research_interest', ''), 
+            key="input_interest")
+        target_degree = st.text_input(text["degree_label"], 
+            value=config['profile'].get('target_degree', 'Ph.D.'), 
+            key="input_target_degree")
+        preferences = st.text_area(text["preferences_label"], 
+            value=config['profile'].get('preferences', ''), 
+            key="input_preferences")
 
-# Target Schools
+# --- Section 2: Targets & Strategy ---
 with st.expander(text["targets_header"], expanded=True):
-    manual_targets_str = st.text_area(text["manual_targets_label"], value="\n".join(config.get('manual_targets', [])))
-    rec_count = st.number_input(text["rec_count_label"], min_value=0, max_value=10, value=config['settings'].get('recommendation_count', 3))
+    default_countries = config.get('target_countries', ["United States"])
+    available_countries = ["United States", "United Kingdom", "Canada", "Singapore", "Hong Kong", "Switzerland", "Germany", "Australia", "Japan"]
+    for c in default_countries:
+        if c not in available_countries: available_countries.append(c)
+        
+    target_countries = st.multiselect(
+        text["target_countries_label"], 
+        available_countries,
+        default=default_countries,
+        key="input_countries"
+    )
+    
+    manual_targets_str = st.text_area(text["manual_targets_label"], 
+        value="\n".join(config.get('manual_targets', [])), 
+        key="input_manual_targets")
+    
+    col_strat1, col_strat2 = st.columns(2)
+    with col_strat1:
+        rec_count = st.number_input(text["rec_count_label"], 
+            min_value=0, max_value=20, 
+            value=config['settings'].get('recommendation_count', 3),
+            key="input_rec_count")
+    with col_strat2:
+        strategy_idx = st.selectbox(
+            text["strategy_label"], 
+            range(len(text["strategy_options"])),
+            format_func=lambda x: text["strategy_options"][x],
+            index=2,
+            key="input_strategy" 
+        )
+        actual_rec_strategy = STRATEGY_MAPPING[strategy_idx]
 
-# Action Button
-if st.button(text["start_button"], type="primary"):
-    if not api_key:
+# --- Action Section ---
+if st.button(text["start_button"], type="primary", use_container_width=True, key="btn_start"):
+    if not api_key or not tavily_api_key:
         st.error(text["error_missing_key"])
     else:
-        # Update Config Object
+        # Prepare Data
         current_profile = {
+            'major': major,
+            'search_keywords': search_keywords,
+            'highest_school': highest_school,
+            'current_degree': current_degree,
             'gpa': gpa, 'paper': paper, 'english_test': english_test,
             'research_interest': research_interest, 'target_degree': target_degree,
             'preferences': preferences
         }
         manual_targets = [s.strip() for s in manual_targets_str.split('\n') if s.strip()]
         
-        # Initialize Agent
         try:
-            # Set Tavily API Key in env if provided
-            if tavily_api_key:
-                os.environ["TAVILY_API_KEY"] = tavily_api_key
+            if tavily_api_key: os.environ["TAVILY_API_KEY"] = tavily_api_key
 
-            # Initialize services
             llm, web_tool, sch_engine = init_services(
                 api_key=api_key, 
                 base_url=base_url, 
                 model_name=model_name,
                 sch_api_key=sch_api_key
             )
-            # Get prompts
-            recommender_prompt, analyzer_prompt = get_prompts(language)
+            
+            recommender_prompt, analyzer_prompt = get_prompts(language, major, target_countries, actual_rec_strategy)
             
             status_container = st.status(text["status_running"], expanded=True)
             
             # 1. AI Recommendations
-            status_container.write(text["status_ai_recs"])
-            src_manual = "手动目标" if language == "Chinese" else "Manual Target"
-            src_ai = "AI 推荐" if language == "Chinese" else "AI Recommendation"
+            countries_str = ", ".join(target_countries)
+            status_container.write(text["status_ai_recs"].format(text["strategy_options"][strategy_idx], countries_str))
             
-            final_list = [{"name": s, "source": src_manual} for s in manual_targets]
+            raw_school_list = [{"name": s, "source": text["source_manual"]} for s in manual_targets]
             
             if rec_count > 0:
                 ai_schools = get_ai_recommendations(llm, recommender_prompt, current_profile, manual_targets, rec_count, language)
                 for s in ai_schools:
-                    final_list.append({"name": s, "source": src_ai})
-                    status_container.write(text["rec_item"].format(s))
+                    raw_school_list.append({"name": s, "source": text["source_ai"]})
             
-            # 2. Analysis
-            status_container.write(text["status_analyzing"].format(len(final_list)))
+            # 2. Smart Deduplication
+            status_container.write(text["status_deduplicating"])
+            final_list = deduplicate_school_list(llm, raw_school_list)
+            
+            # 3. Parallel Analysis
+            status_container.write(text["status_analyzing"].format(len(final_list), major))
             results = []
             progress_bar = status_container.progress(0)
             
@@ -214,7 +427,12 @@ if st.button(text["start_button"], type="primary"):
                         analyzer_prompt, 
                         web_tool, 
                         sch_engine, 
-                        research_interest
+                        research_interest,
+                        major, 
+                        highest_school,
+                        current_degree,
+                        english_test,
+                        search_keywords
                     ): item for item in final_list
                 }
                 
@@ -236,15 +454,16 @@ if st.button(text["start_button"], type="primary"):
                 st.subheader(text["results_header"])
                 st.dataframe(df)
                 
-                # Generate HTML Report
                 report_file = generate_html_report(df, language=language)
                 
-                # Download Buttons
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(text["download_csv"], csv, "phd_strategy_report.csv", "text/csv")
+                col_down1, col_down2 = st.columns(2)
+                with col_down1:
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(text["download_csv"], csv, "phd_strategy_report.csv", "text/csv")
                 
-                with open(report_file, "rb") as f:
-                    st.download_button(text["download_html"], f, "phd_report.html", "text/html")
+                with col_down2:
+                    with open(report_file, "rb") as f:
+                        st.download_button(text["download_html"], f, "phd_report.html", "text/html")
                 
             else:
                 st.warning(text["no_results"])

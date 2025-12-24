@@ -2,26 +2,65 @@
 #  User Profile (Applicant Background)
 # ==========================================
 profile:
-  gpa: "3.0/5.0"
-  paper: "One EI conference paper on Robot Path Planning"
-  english_test: "Duolingo English Test (Target: 125+)"
-  research_interest: "Embodied AI, Robotics, Reinforcement Learning, Agentic Systems"
-  target_degree: "Ph.D. in Computer Science"
-  preferences: "US Schools. Need Full Funding. Open to public universities with strong research groups."
+  # [关键 1] 核心学历 - AI 判定 Waiver 的依据
+  # 直接写全名 + 缩写，明确这是中国正规院校
+  highest_school: "Beijing Institute of Technology, Zhuhai (BIT Zhuhai)"
+  
+  # [关键 2] 学位名称 - 强化技术背景
+  # 不要只写Bachelor of Engineering，一定要把专业写出来！
+  # 这样 AI 知道你懂机器人和AI，会把你推给做AI/ML的导师，而不是纯理论研究的导师。
+  current_degree: "Bachelor of Engineering (Specialization: Robotics Engineering & AI Applications)"
+  
+  # [关键 3] 申请方向 - 结合你的背景和目标
+  # 你的背景是"机器人+AI工程"，目标是"轻量化AI系统"。
+  # 填这个词能让 AI 同时搜索AI实验室和机器人研究中心。
+  major: "AI/ML Systems and Robotics"
+
+  # [新增] 核心搜索关键词
+  # 这些词会被直接加入搜索引擎，用于寻找导师。
+  # 填你最核心的研究领域词汇，不要写长句。
+  search_keywords: "Lightweight AI, Robotics Perception, Edge Computing, Model Compression" 
+  
+  # 个人数据
+  gpa: "3.01/5.0 (Strong upward trend in major courses; Machine Vision: 92/100)" 
+  
+  # 论文情况 (保持之前的翻译即可)
+  paper: >
+    1. Underwater image enhancement using CycleGAN (1st Author, NCIT 2022).
+    2. Co-authored paper on Internet Addiction and Depression among College Students.
+    3. Achieved top 9% ranking (37/423) in iFLYTEK's Text Classification Challenge.
+  
+  # [关键 4] 英语成绩 - 强调实际能力
+  # 重点让 AI 去查：DET 75分是否满足目标学校要求？
+  english_test: "Duolingo English Test 75 (Targeting schools with 70-80 minimum requirement). Strong technical writing ability demonstrated in GitHub documentation and published paper."
+  
+  # 研究兴趣
+  research_interest: "Lightweight AI models for robotics, Edge deployment optimization, Human-AI collaborative systems, Computer vision under resource constraints"
+  
+  target_degree: "Ph.D."
+  
+  # 偏好设置 (保持不变)
+  preferences: "Strict Location Requirement: US Schools.  Open to public universities with strong research groups. Prioritize labs with hardware resources for robotics testing. Require full funding with RA/TA positions."
 
 # ==========================================
-#  Manual Targets (Schools you already know)
+#  Target Countries
+# ==========================================
+target_countries:
+  - "United States"
+
+# ==========================================
+#  Manual Targets (包括你之前的目标)
 # ==========================================
 manual_targets:
-  - "University of Texas at Dallas"
+  - "Texas Tech University"
   - "University of Texas at San Antonio"
-  - "Stevens Institute of Technology"
-  - "University of California, Riverside"
+  - "University of Texas at Dallas"
+  - "Arizona State University"
 
 # ==========================================
 #  Agent Settings
 # ==========================================
 settings:
-  recommendation_count: 5  # Number of schools AI should recommend
-  max_search_results: 3    # Depth of Tavily search per school
-  report_language: "English" # Options: "English", "Chinese"
+  recommendation_count: 10
+  max_search_results: 10
+  report_language: "Chinese" 

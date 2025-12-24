@@ -30,17 +30,19 @@ The inefficiency of manually comparing dozens or hundreds of programs
 Traditional rankings (such as US News) provide little insight into actual research fit.
 PhD-Scout aims to address this gap by automating the initial scouting stage, allowing applicants to focus on evaluating a refined, high-quality shortlist and preparing targeted statements of purpose.
 
-Key Features
-1. Hybrid Program Discovery
+# Key Features
+
+## 1. Hybrid Program Discovery
 
 Combines manually specified target programs with AI-generated recommendations based on user background (GPA, publications, research keywords).
 
-2. Research Fit Analysis
+## 2. Research Fit Analysis
 
-Uses LLM-based semantic matching to evaluate alignment between user research interests and faculty research areas.
-Produces a numerical fit score (0–100) for easier comparison.
+*   **Dual-Source Verification**: Combines Google Search (Tavily) for admission info with **Semantic Scholar API** for academic depth.
+*   **Fit Scoring**: Uses LLM to analyze faculty papers against your keywords, generating a "Research Fit Score" (0–100) and identifying specific professors.
+*   **Alumni Bonus**: Automatically detects and boosts scores if the target school has alumni connections (configurable).
 
-3. Verification of Hard Constraints
+## 3. Verification of Hard Constraints
 
 Automatically checks program webpages for critical admission requirements, including:
 
@@ -52,7 +54,7 @@ GPA and prerequisite expectations
 
 Each claim includes a source URL for manual verification.
 
-4. Interactive Web Interface (Streamlit)
+## 4. Interactive Web Interface (Streamlit)
 
 Provides a user-friendly interface for configuring inputs, running analyses, and exporting results.
 
@@ -80,6 +82,13 @@ LLM Providers: OpenAI GPT-4o, DeepSeek V3 (configurable)
 Search Engine: Tavily API
 
 GUI: Streamlit
+
+## Interface Preview
+
+PhD-Scout provides a user-friendly Streamlit dashboard, allowing you to easily configure your profile, strategy, and API keys without touching the code.
+
+![screenshot](./assets/demo_GUI_english.png)
+*(The Configuration Dashboard)*
 
 # Quick Start
 
@@ -161,17 +170,15 @@ Users are encouraged to review final results before submitting applications or p
 
 # Roadmap
 
- Core program search and matching logic
+- [ ] Parallel processing optimization (Current: ThreadPool)
 
- Parallel processing for faster crawling
+- [x] Bilingual reporting (English/Chinese) - *Implemented*
 
- Bilingual reporting (English/Chinese)
+- [x] Streamlit graphical interface - *Implemented*
 
- Streamlit graphical interface
+- [x] Semantic Scholar integration - *Implemented*
 
- RAG-based integration using Semantic Scholar for deeper faculty analysis
-
- Automatic email draft generator for contacting potential advisors
+- [ ] Automatic email draft generator for contacting potential advisors
 
 # License
 
