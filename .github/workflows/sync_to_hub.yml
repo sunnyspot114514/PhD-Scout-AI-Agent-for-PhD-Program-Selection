@@ -18,4 +18,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}  # 刚才在 GitHub 设置的 Secret
         run: |
-          git push https://sunny114514:$HF_TOKEN@huggingface.co/spaces/sunny114514/PhD-Scout main
+          git push -f https://sunny114514:$HF_TOKEN@huggingface.co/spaces/sunny114514/PhD-Scout main
