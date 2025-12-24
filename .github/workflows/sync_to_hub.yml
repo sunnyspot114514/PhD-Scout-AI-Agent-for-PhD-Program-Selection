@@ -11,29 +11,27 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          lfs: true  # 1. 必须开启：把图片文件下载到 Action 运行环境里
+          lfs: true  # 1. 依然开启 LFS 以便从 GitHub 下载图片
 
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # 2. 配置 Git 用户信息（LFS 传输协议要求必须有用户身份）
+          # 2. 配置 Git 用户
           git config --global user.email "104133192+sunnyspot114514@users.noreply.github.com"
           git config --global user.name "sunnyspot114514"
 
-          # 3. 安装 LFS 支持
-          git lfs install
+          # 3. 【核心修改】安装 git-xet 工具
+          # 使用官方文档提供的安装脚本
+          curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/huggingface/xet-core/refs/heads/main/git_xet/install.sh | sudo sh
 
-          # 4. 添加 Hugging Face 远程仓库，并带上密码
-          # 我们给它起个代号叫 'hf'
+          # 4. 在当前仓库初始化 Xet
+          # 这会让 git 知道如何处理大文件
+          git xet install
+
+          # 5. 添加远程仓库
           git remote add hf https://sunny114514:$HF_TOKEN@huggingface.co/spaces/sunny114514/PhD-Scout
 
-          # -------------------------------------------------------
-          # 5. 【至关重要的一步】先单独推送 LFS 对象（图片）
-          # 这条命令会把 assets 里的图片先传到 Hugging Face 的 LFS 服务器
-          # -------------------------------------------------------
-          git lfs push --all hf main
-
-          # 6. 图片传完后，最后强制推送代码
-          # 此时 HF 知道图片已经在 LFS 里了，就不会再报错了
-          git push -f hf main          
+          # 6. 强制推送
+          # 有了 git-xet，普通的 git push 就能自动处理大文件了，不需要手动 git lfs push
+          git push -f hf main                    
