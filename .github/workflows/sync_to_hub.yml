@@ -8,47 +8,66 @@ jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
     steps:
-      # 1. 下载代码（开启 LFS，把真实图片下载下来）
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           lfs: true
 
-      # 2. 设置 Python 环境
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      # 3. 安装 Hugging Face 官方工具 (带 Xet 支持)
       - name: Install dependencies
         run: pip install -U huggingface_hub
 
-      # 4. 使用 Python 脚本同步 (核心步骤)
       - name: Push to Hub via Python SDK
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          # 你的 HF 用户名
           HF_USERNAME: sunny114514
-          # 你的 HF Space 名字
           HF_SPACE_NAME: PhD-Scout
         run: |
           python -c "
           from huggingface_hub import HfApi
           import os
 
-          api = HfApi(token=os.environ['HF_TOKEN'])
+          # --- 1. 定义你要注入的 Hugging Face 配置头 ---
+          # 可以在这里随心所欲地修改配置，不用动本地文件
+          hf_header = \"\"\"---
+          title: PhD Scout AI Agent
+          emoji: 🎓
+          colorFrom: blue
+          colorTo: indigo
+          sdk: docker
+          pinned: false
+          app_port: 8501
+          ---
+          \"\"\"
+
+          # --- 2. 读取当前的 README ---
+          try:
+              with open('README.md', 'r', encoding='utf-8') as f:
+                  original_content = f.read()
+          except FileNotFoundError:
+              original_content = \"# PhD Scout\"
+
+          # --- 3. 拼接并写入 (只在临时的 Docker 容器里修改，不影响 GitHub) ---
+          with open('README.md', 'w', encoding='utf-8') as f:
+              f.write(hf_header + \"\\n\" + original_content)
           
+          print('Automatically injected HF metadata into README.md')
+
+          # --- 4. 开始上传 ---
+          api = HfApi(token=os.environ['HF_TOKEN'])
           repo_id = f\"{os.environ['HF_USERNAME']}/{os.environ['HF_SPACE_NAME']}\"
           
           print(f'Starting upload to {repo_id}...')
           
-          # upload_folder 会自动处理大文件、LFS/Xet 以及增量更新
           api.upload_folder(
               folder_path='.',
               repo_id=repo_id,
               repo_type='space',
-              ignore_patterns=['.git', '.github'] # 忽略 git 自身目录
+              ignore_patterns=['.git', '.github']
           )
           
           print('Upload complete!')
