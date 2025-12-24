@@ -1,5 +1,7 @@
 # PhD-Scout: AI-Powered Research & Admission Agent
 
+[![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/raw/main/open-in-hf-spaces-sm-dark.svg)](https://huggingface.co/spaces/sunny114514/PhD-Scout)
+
 [🇺🇸 English](README.md) | [🇨🇳 中文说明](README.zh-CN.md)
 
 PhD-Scout is an AI-driven assistant designed to streamline the early-stage search and evaluation of Ph.D. programs.
@@ -29,6 +31,13 @@ The inefficiency of manually comparing dozens or hundreds of programs
 
 Traditional rankings (such as US News) provide little insight into actual research fit.
 PhD-Scout aims to address this gap by automating the initial scouting stage, allowing applicants to focus on evaluating a refined, high-quality shortlist and preparing targeted statements of purpose.
+
+## Live Demo
+
+Experience the full functionality directly on Hugging Face Spaces without any installation:
+
+ **[Click here to try PhD Scout online](https://huggingface.co/spaces/sunny114514/PhD-Scout)**
+
 
 # Key Features
 

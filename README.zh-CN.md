@@ -6,6 +6,8 @@
 
 中文说明 (Chinese)
 
+[![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/raw/main/open-in-hf-spaces-sm-dark.svg)](https://huggingface.co/spaces/sunny114514/PhD-Scout)
+
 PhD-Scout 是一款 AI 驱动的工具，旨在简化博士项目申请初期的筛选和评估流程。
 它专注于解决三个通常需要大量人工操作的核心任务：
 
@@ -13,6 +15,12 @@ PhD-Scout 是一款 AI 驱动的工具，旨在简化博士项目申请初期的
 验证关键录取要求（例如是否接受 Duolingo 英语测试）
 确认奖学金资助政策及其他硬性条件
 该工具最初是为了辅助我本人申请美国计算机科学博士项目而开发，现作为开源项目发布，希望帮助面临类似挑战的申请者。
+
+## 在线演示 (Live Demo)
+
+无需安装环境，直接在 Hugging Face Spaces 上体验完整功能：
+
+ **[点击这里跳转到 PhD Scout 在线版](https://huggingface.co/spaces/sunny114514/PhD-Scout)**
 
 # 背景与动机
 在申请博士项目的过程中，申请人往往需要花费大量时间处理以下问题：
