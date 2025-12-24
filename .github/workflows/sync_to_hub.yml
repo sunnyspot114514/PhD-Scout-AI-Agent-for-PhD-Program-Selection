@@ -11,27 +11,29 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          lfs: true  # 1. 从 GitHub 下载真实的图片文件
+          lfs: true  # 1. 必须开启：把图片文件下载到 Action 运行环境里
 
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # 2. 配置 Git 用户 (LFS 传输有时需要)
+          # 2. 配置 Git 用户信息（LFS 传输协议要求必须有用户身份）
           git config --global user.email "104133192+sunnyspot114514@users.noreply.github.com"
           git config --global user.name "sunnyspot114514"
 
-          # 3. 安装 LFS
+          # 3. 安装 LFS 支持
           git lfs install
 
-          # 4. 设置 Hugging Face 远程仓库地址
-          # 我们把这个地址命名为 'hf'，方便后面引用
+          # 4. 添加 Hugging Face 远程仓库，并带上密码
+          # 我们给它起个代号叫 'hf'
           git remote add hf https://sunny114514:$HF_TOKEN@huggingface.co/spaces/sunny114514/PhD-Scout
 
-          # 5. 【关键修复】显式推送 LFS 对象
-          # 这条命令会强制把图片先传到 Hugging Face 的 LFS 服务器
+          # -------------------------------------------------------
+          # 5. 【至关重要的一步】先单独推送 LFS 对象（图片）
+          # 这条命令会把 assets 里的图片先传到 Hugging Face 的 LFS 服务器
+          # -------------------------------------------------------
           git lfs push --all hf main
 
-          # 6. 最后推送代码
-          # 此时图片已经传完了，这里只传代码和指针，HF 就不会报错了
-          git push -f hf main
+          # 6. 图片传完后，最后强制推送代码
+          # 此时 HF 知道图片已经在 LFS 里了，就不会再报错了
+          git push -f hf main          
