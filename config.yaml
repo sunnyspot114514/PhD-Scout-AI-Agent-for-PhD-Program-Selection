@@ -32,7 +32,7 @@ profile:
   
   # [关键 4] 英语成绩 - 强调实际能力
   # 重点让 AI 去查：DET 75分是否满足目标学校要求？
-  english_test: "Duolingo English Test 75 (Targeting schools with 70-80 minimum requirement). Strong technical writing ability demonstrated in GitHub documentation and published paper."
+  english_test: "Duolingo English Test 100 (Targeting schools with 70-80 minimum requirement). Strong technical writing ability demonstrated in GitHub documentation and published paper."
   
   # 研究兴趣
   research_interest: "Lightweight AI models for robotics, Edge deployment optimization, Human-AI collaborative systems, Computer vision under resource constraints"

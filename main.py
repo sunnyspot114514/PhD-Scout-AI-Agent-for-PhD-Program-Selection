@@ -13,11 +13,14 @@ from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from pydantic import BaseModel, Field
 from difflib import SequenceMatcher
 
+# 导入日志系统
+from logger import logger
+
 try:
     from semanticscholar import SemanticScholar
 except ImportError:
     SemanticScholar = None
-    print("[Warning] semanticscholar not installed. Academic paper search disabled.")
+    logger.warning("semanticscholar not installed. Academic paper search disabled.")
 
 
 load_dotenv()
@@ -42,8 +45,10 @@ def init_services(api_key, base_url, model_name="gpt-4o-mini", sch_api_key=None)
     if SemanticScholar:
         try:
             sch_engine = SemanticScholar(api_key=sch_api_key)
+            logger.info("Semantic Scholar 初始化成功")
         except Exception as e:
-            print(f"[Warning] SemanticScholar init failed: {e}")
+            logger.warning(f"Semantic Scholar 初始化失败: {e}")
+            print(f"[Warning] SemanticScholar init failed: {e}")  # 保持原有输出
             
     return llm, web_tool, sch_engine
 
@@ -58,7 +63,7 @@ class SchoolReport(BaseModel):
     match_reason: str = Field(description="Detailed reason for fit")
     red_flags: str = Field(description="Potential risks formatted as numbered list")
     source_url: str = Field(description="Verification URL")
-
+    application_deadline: str = Field(description="Application deadline (e.g., 'Dec 15, 2025' or 'Rolling')")
 # --- 4. 辅助函数 ---
 def check_is_alumni(school_name, highest_school):
     if not highest_school or len(highest_school) < 3: return False
@@ -79,19 +84,28 @@ def ensure_english_term(llm, text):
     if not text or len(text) < 2: return ""
     if not re.search(r'[\u4e00-\u9fa5]', text):
         return text 
-    print(f"[Translator] Translating '{text}' to English...")
+    logger.debug(f"Translating '{text}' to English...")
+    print(f"[Translator] Translating '{text}' to English...")  # 保持原有输出
     prompt = ChatPromptTemplate.from_template(
         "Translate the following academic term/major into English. Output ONLY the English term. No explanations. Term: {text}"
     )
     chain = prompt | llm | StrOutputParser()
     try:
-        return chain.invoke({"text": text}).strip()
-    except:
+        result = chain.invoke({"text": text}).strip()
+        logger.debug(f"Translation result: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Translation failed for '{text}': {e}")
         return text
 
 # --- 5. Prompts (包含去重修复 + 阶梯打分逻辑) ---
 def get_prompts(language="English", major="Interdisciplinary", target_countries=None, strategy="Balanced"):
-    if target_countries is None: target_countries = ["Global"]
+    # 地理位置处理
+    if not target_countries or "Global" in target_countries:
+        geo_str = "Global (Any country)" if language == "English" else "全球 (不限国家)"
+    else:
+        geo_list_str = ", ".join(target_countries)
+        geo_str = f"Only within: {geo_list_str}" if language == "English" else f"仅限以下地区: {geo_list_str}"
     
     # 策略描述
     if strategy == "Top Tier (冲刺名校)":
@@ -107,8 +121,9 @@ def get_prompts(language="English", major="Interdisciplinary", target_countries=
     if language == "Chinese":
         recommender_template = f"""
         你是一位资深的 {major} 博士申请顾问。
-        任务：基于用户背景，推荐 {{count}} 所 **新的**、**不在手动列表中的** 适合申请的大学。
+        任务：基于用户背景，在**指定地理范围内**推荐 {{count}} 所 **新的**、**不在手动列表中的** 适合申请的大学。
         
+        【限制区域】: {geo_str}
         【用户背景】: {{profile}}
         【手动目标】: {{manual_list}}
         【策略】: {strategy} ({strat_hint})
@@ -118,11 +133,12 @@ def get_prompts(language="English", major="Interdisciplinary", target_countries=
         2. 仅输出一个 JSON 列表，例如 ["School A", "School B"]。
         3. 学校名称 **必须保留英文原名**。
         4. 不要输出 Markdown 格式。
+        5. **必须严格遵守【限制区域】**。如果限制了国家，绝对不要推荐其他国家的学校。
         """
     else:
         recommender_template = f"""
         You are a Senior {major} Ph.D. Consultant.
-        Task: Recommend {{count}} **NEW** universities based on the profile.
+        Task: Based on the user's profile, recommend {{count}} suitable universities to apply to within the specified geographic range.
         
         [Profile]: {{profile}}
         [Manual Targets]: {{manual_list}}
@@ -133,6 +149,7 @@ def get_prompts(language="English", major="Interdisciplinary", target_countries=
         2. Output strictly a JSON list of strings: ["School A", "School B"].
         3. Keep school names in English.
         4. No Markdown code blocks.
+        5. **STRICTLY follow the [Target Region]**.
         """
 
     # --- Analyzer Prompt ---
@@ -149,7 +166,10 @@ def get_prompts(language="English", major="Interdisciplinary", target_countries=
         1. **语言判定**: 寻找 {{english_test}} 要求。
         2. **资金**: 总结 Stipend, Tuition Waiver 信息。
         3. **导师**: 寻找与 "{{interest}}" 匹配的教授。
-        4. **避坑**: 寻找潜在风险。
+        4. **避坑**:
+           - 寻找潜在风险（如：资金不保证、录取率极低、项目缩招等）。
+           - **必须包含申请截止日期**，格式: "Deadline: Dec 15, 2025" 或 "Deadline: Rolling"。
+           - 如果截止日期已过或临近（30天内），标记为风险。
         
         5. **打分逻辑 (Research Fit Score)**:
            - 必须是 **5的倍数** (如 75, 80, 85)。
@@ -176,19 +196,26 @@ def get_prompts(language="English", major="Interdisciplinary", target_countries=
         User Info: Graduated from {{highest_school}} (Alumni: {{is_alumni_str}})
 
         Instructions:
-        1. **Language**: Output in ENGLISH.
-        2. **Scoring Logic (Crucial)**:
-           - Score MUST be a **multiple of 5**.
-           - **ALUMNI BONUS**: If (Alumni: True), you **MUST boost the score by 5-10 points**.
-           - **Tier 1 (90-100)**: Perfect Match OR (Strong Match + Alumni).
-           - **Tier 2 (80-85)**: Strong Match OR (Moderate Match + Alumni).
-           - **Tier 3 (70-75)**: Moderate Match.
-           - **Tier 4 (< 65)**: Low Match.
-        
-        3. **Match Reason**:
-           - **If (Alumni: True)**, start the match_reason with "[Alumni Edge]".
-           - **If (Alumni: False)**, **DO NOT mention** the alumni status. Focus solely on research, program, funding fit, etc.
-        
+        1. **Language Requirements**: Find {{english_test}} requirements. Check if waiver is possible.
+        2. **Funding**: Summarize Stipend, Tuition Waiver, and Health Insurance details.
+        3. **Faculty Match**: Find professors whose research aligns with "{{interest}}".
+        4. **Red Flags**:
+        - Include potential risks (e.g., no guaranteed funding, low acceptance rate).
+        - **MUST include application deadline** in format: "Deadline: Dec 15, 2025" or "Deadline: Rolling".
+        - If deadline has passed or is within 30 days, mark as a risk.
+
+        5. **Scoring Logic (Crucial)**:
+        - Score MUST be a **multiple of 5**.
+        - **ALUMNI BONUS**: If (Alumni: True), you **MUST boost the score by 5-10 points**.
+        - **Tier 1 (90-100)**: Perfect Match (research fit + full funding + active advisor) OR (Strong Match + Alumni).
+        - **Tier 2 (80-85)**: Strong Match (research fit + possible funding) OR (Moderate Match + Alumni).
+        - **Tier 3 (70-75)**: Moderate Match (related but not core, unclear funding/language).
+        - **Tier 4 (< 65)**: Low Match (misaligned research or serious Red Flags).
+
+        6. **Match Reason**:
+        - **If (Alumni: True)**, start the match_reason with "[Alumni Edge]".
+        - **If (Alumni: False)**, **DO NOT mention** the alumni status. Focus solely on research, program, funding fit, etc.
+
         Output strictly in JSON:
         {{format_instructions}}
         """
@@ -199,7 +226,8 @@ def get_prompts(language="English", major="Interdisciplinary", target_countries=
 
 # --- 6. 通用去重 ---
 def deduplicate_school_list(llm, raw_list):
-    print(f"\n[System] 正在进行去重 (输入: {len(raw_list)})...")
+    logger.info(f"开始去重处理: 输入 {len(raw_list)} 条记录")
+    print(f"\n[System] 正在进行去重 (输入: {len(raw_list)})...")  # 保持原有输出
     unique_schools = {}
     
     def get_key(name):
@@ -210,13 +238,23 @@ def deduplicate_school_list(llm, raw_list):
         clean = " ".join(clean.split())
         return clean
 
+    # 先标准化输入，防止崩溃
+    normalized_list = []
     for item in raw_list:
+        if isinstance(item, str):
+            normalized_list.append({'name': item, 'source': 'AI Recommendation'})
+        elif isinstance(item, dict):
+            if 'name' not in item and 'school_name' in item:
+                item['name'] = item['school_name']
+            normalized_list.append(item)
+
+    for item in normalized_list:
         if "AI" not in item['source']:
             key = get_key(item['name'])
             unique_schools[key] = item
             
     ai_added = 0
-    for item in raw_list:
+    for item in normalized_list:  # 修复：使用 normalized_list 而不是 raw_list
         if "AI" in item['source']:
             key = get_key(item['name'])
             if key not in unique_schools:
@@ -224,12 +262,14 @@ def deduplicate_school_list(llm, raw_list):
                 ai_added += 1
     
     final = list(unique_schools.values())
+    logger.info(f"去重完成: 输出 {len(final)} 条记录")
     return final
 
 # --- 7. 核心功能 ---
 def get_academic_papers(school_name, interest_en, sch_engine, major_en="Computer Science"):
     #  安全调用检查
     if not sch_engine:
+        logger.debug("Semantic Scholar 引擎未初始化，跳过学术论文搜索")
         return "Academic search disabled (Library not loaded)."
 
     try:
@@ -237,18 +277,25 @@ def get_academic_papers(school_name, interest_en, sch_engine, major_en="Computer
         short_major = " ".join(clean_major.split()[:3]) 
         
         query = f"{school_name} {short_major} {interest_en}"
+        logger.debug(f"学术论文搜索查询: {query}")
         results = sch_engine.search_paper(query=query, limit=3, fields=['title', 'abstract', 'venue', 'year', 'authors'])
         
         context = ""
-        if not results: return "No specific papers found."
+        if not results: 
+            logger.debug(f"未找到 {school_name} 的相关论文")
+            return "No specific papers found."
         for i, paper in enumerate(results):
             authors = ", ".join([a.name for a in paper.authors[:3]]) if paper.authors else ""
             context += f"[{i+1}] {paper.title} ({paper.year})\nAbstract: {(paper.abstract or '')[:150]}...\n"
+        logger.debug(f"找到 {len(results)} 篇相关论文")
         return context
-    except Exception as e: return f"Academic search error: {str(e)[:100]}"
+    except Exception as e: 
+        logger.error(f"学术论文搜索失败: {str(e)[:100]}")
+        return f"Academic search error: {str(e)[:100]}"
 
 def get_ai_recommendations(llm, recommender_prompt, profile, manual_list, count, language="English"):
-    print(f"\n[Agent 1] Generating recommendations...")
+    logger.info(f"开始生成 AI 推荐: 目标数量 {count}")
+    print(f"\n[Agent 1] Generating recommendations...")  # 保持原有输出
     chain = recommender_prompt | llm | StrOutputParser()
     try:
         h_school = profile.get('highest_school', 'Unknown') if isinstance(profile, dict) else "Unknown"
@@ -260,19 +307,60 @@ def get_ai_recommendations(llm, recommender_prompt, profile, manual_list, count,
         })
         clean_content = raw_content.replace("```json", "").replace("```", "").strip()
         match = re.search(r'\[.*\]', clean_content, re.DOTALL)
-        return json.loads(match.group()) if match else []
-    except Exception:
+        result = json.loads(match.group()) if match else []
+        logger.info(f"AI 推荐完成: 生成 {len(result)} 所学校")
+        return result
+    except Exception as e:
+        logger.error(f"AI 推荐失败: {e}")
         return []
 
 def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch_engine, 
-                   interest, major, highest_school, current_degree, english_test, search_keywords):
+                   interest, major, highest_school, current_degree, english_test, search_keywords,
+                   target_countries=None, target_degree="PhD", major_en=None, keywords_en=None):
+    logger.info(f"开始分析学校: {school_name}")
     msg = f"Scouting: {school_name}"
-    print(msg)
+    print(msg)  # 保持原有输出
     try:
-        search_major_en = ensure_english_term(llm, major)
+        # 适当调整学校名称，增加国家信息以提升搜索准确度
+        refined_name = school_name
+        if target_countries and len(target_countries) == 1 and "Global" not in target_countries:
+            if target_countries[0] not in school_name:
+                refined_name = f"{school_name} {target_countries[0]}"
+
+        # 使用预翻译的结果，如果没有传入则回退到翻译
+        search_major_en = major_en if major_en else ensure_english_term(llm, major)
         raw_keywords = search_keywords if search_keywords else interest
-        search_keywords_en = ensure_english_term(llm, raw_keywords)
+        # 使用预翻译的结果，如果没有传入则回退到翻译
+        search_keywords_en = keywords_en if keywords_en else ensure_english_term(llm, raw_keywords)
         
+        # 中文意图检测
+        has_chinese_intent = any(k in raw_keywords for k in ["中文", "华文", "Chinese", "Mandarin"])
+        
+        if has_chinese_intent:
+            final_keywords = raw_keywords 
+            logger.info(f"检测到中文/双语意图，保留原始关键词: {final_keywords}")
+            print(f"[Search] 检测到中文/双语意图，保留原始关键词: {final_keywords}")  # 保持原有输出
+        else:
+            final_keywords = ensure_english_term(llm, raw_keywords)
+        
+        # 动态学位判断 (Master vs PhD)
+        degree_term = target_degree if target_degree else "PhD"
+        is_master = any(x in degree_term for x in ["Master", "MSc", "MA", "硕士"])
+
+        if is_master:
+            # 硕士模式：搜学费，不搜全奖
+            search_degree_type = "Master"
+            funding_query_part = "tuition fees curriculum admission requirements"
+        else:
+            # 博士模式：搜全奖 Stipend
+            search_degree_type = "PhD"
+            funding_query_part = "funding stipend tuition waiver assistantship handbook"
+
+        # 语言搜索后缀 (既搜中文也搜英文官网)
+        lang_suffix = ""
+        if has_chinese_intent:
+            lang_suffix = "AND (Chinese OR Mandarin OR bilingual)"
+
         user_test = "TOEFL IELTS"
         if english_test:
             if "Duolingo" in english_test or "DET" in english_test: user_test = "Duolingo minimum score"
@@ -280,10 +368,15 @@ def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch
             elif "TOEFL" in english_test: user_test = "TOEFL minimum score"
         
         web_query = (
-            f"{school_name} {search_major_en} PhD admission requirements "
+            f"{refined_name} {search_major_en} {final_keywords} {search_degree_type} admission "
             f"language waiver {user_test} "
-            f"PhD student funding package stipend amount tuition waiver health insurance assistantship handbook"
+            f"{lang_suffix} "
+            f"{funding_query_part} " 
+            f"Official {search_degree_type} Program Handbook (PDF)"
+            f"application deadline"
+            f"{search_degree_type} student funding package stipend amount tuition waiver health insurance assistantship handbook"
         )
+        logger.debug(f"构建搜索查询: {web_query[:100]}...")
         
         web_results = web_tool.invoke(web_query)
         web_context = "\n".join([f"Src: {res['url']}\nTxt: {res['content']}" for res in web_results])
@@ -292,6 +385,7 @@ def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch
 
         is_alumni = check_is_alumni(school_name, highest_school)
         is_alumni_str = "True" if is_alumni else "False"
+        logger.debug(f"校友检测结果: {school_name} -> {is_alumni_str}")
 
         parser = JsonOutputParser(pydantic_object=SchoolReport)
         chain = analyzer_prompt | llm | parser
@@ -307,9 +401,11 @@ def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch
         
         result['source'] = source_type
         if not result.get('source_url'): result['source_url'] = "N/A"
+        logger.info(f"学校分析完成: {school_name} (匹配分: {result.get('research_fit_score', 'N/A')})")
         return result
     except Exception as e:
-        print(f"    {school_name} Failed: {e}")
+        logger.error(f"学校分析失败: {school_name} - {e}")
+        print(f"    {school_name} Failed: {e}")  # 保持原有输出
         return None
 
 # --- HTML Report Generators ---
@@ -382,6 +478,12 @@ def generate_html_report(df, language="English"):
     </head><body><div class="container"><h1>{title}</h1><h2>{table_title}</h2>{table_html}</div></body></html>"""
     
     with open("phd_report.html", "w", encoding="utf-8") as f: f.write(html)
+    # 自动打开浏览器
+    try:
+        abs_path = os.path.abspath("phd_report.html")
+        webbrowser.open(f"file://{abs_path}")
+    except Exception:
+        pass
     return "phd_report.html"
 
 if __name__ == "__main__":

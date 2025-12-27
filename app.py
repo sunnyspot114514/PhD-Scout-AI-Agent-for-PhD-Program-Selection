@@ -13,7 +13,8 @@ from main import (
     analyze_school, 
     get_prompts, 
     generate_html_report, 
-    deduplicate_school_list
+    deduplicate_school_list,
+    ensure_english_term
 )
 
 # Page Config
@@ -412,7 +413,11 @@ if st.button(text["start_button"], type="primary", use_container_width=True, key
             status_container.write(text["status_deduplicating"])
             final_list = deduplicate_school_list(llm, raw_school_list)
             
-            # 3. Parallel Analysis
+            # 3. Pre-translate (避免在循环中重复调用 LLM)
+            major_en = ensure_english_term(llm, major)
+            keywords_en = ensure_english_term(llm, search_keywords)
+            
+            # 4. Parallel Analysis
             status_container.write(text["status_analyzing"].format(len(final_list), major))
             results = []
             progress_bar = status_container.progress(0)
@@ -432,7 +437,11 @@ if st.button(text["start_button"], type="primary", use_container_width=True, key
                         highest_school,
                         current_degree,
                         english_test,
-                        search_keywords
+                        search_keywords,
+                        target_countries=target_countries,
+                        target_degree=target_degree,
+                        major_en=major_en,
+                        keywords_en=keywords_en
                     ): item for item in final_list
                 }
                 

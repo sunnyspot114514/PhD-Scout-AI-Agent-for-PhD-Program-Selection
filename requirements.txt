@@ -9,3 +9,7 @@ pyyaml
 tabulate
 streamlit
 semanticscholar
+sentence-transformers>=2.2.2
+numpy
+torch
+pytest
