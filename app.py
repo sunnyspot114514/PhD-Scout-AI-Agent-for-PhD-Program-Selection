@@ -6,6 +6,12 @@ import os
 import yaml
 import concurrent.futures
 from dotenv import load_dotenv
+
+# 强制重新加载 main 模块（解决 Streamlit 缓存问题）
+import importlib
+import main
+importlib.reload(main)
+
 # 引入核心功能
 from main import (
     init_services, 
@@ -413,7 +419,41 @@ if st.button(text["start_button"], type="primary", use_container_width=True, key
             status_container.write(text["status_deduplicating"])
             final_list = deduplicate_school_list(llm, raw_school_list)
             
-            # 3. Pre-translate (避免在循环中重复调用 LLM)
+            # 3. 补足逻辑：如果去重后 AI 推荐数量不足，再补推荐
+            target_total = len(manual_targets) + rec_count
+            current_count = len(final_list)
+            if current_count < target_total and rec_count > 0:
+                shortfall = target_total - current_count
+                # 收集已有学校名，避免重复推荐
+                existing_names = [item['name'] for item in final_list]
+                
+                extra_schools = get_ai_recommendations(
+                    llm, recommender_prompt, current_profile, 
+                    existing_names,  # 把已有的都传进去避免重复
+                    shortfall, 
+                    language
+                )
+                # 自动保安逻辑
+                # 定义一个简单的清洗函数，把 "SUSS (Singapore)" 和 "SUSS" 视为同一个
+                def quick_clean(n):
+                    return str(n).lower().replace(" ", "").replace("university", "").replace("of", "").replace("the", "")
+
+                # 建立现有学校的“指纹库”
+                existing_fingerprints = set(quick_clean(item['name']) for item in final_list)
+
+                for s in extra_schools:
+                    # 只有当新学校的指纹 不在 指纹库里时，才添加
+                    if quick_clean(s) not in existing_fingerprints:
+                        final_list.append({"name": s, "source": text["source_ai"]})
+                        # 同时更新指纹库，防止 extra_schools 内部自己重复
+                        existing_fingerprints.add(quick_clean(s))
+                    else:
+                        print(f"[System] 自动拦截了重复推荐: {s}")
+                
+                # 再次去重（以防万一）
+                final_list = deduplicate_school_list(llm, final_list)
+            
+            # 4. Pre-translate (避免在循环中重复调用 LLM)
             major_en = ensure_english_term(llm, major)
             keywords_en = ensure_english_term(llm, search_keywords)
             

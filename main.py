@@ -1,10 +1,12 @@
 import os
 import json
 import yaml
+import time
 import pandas as pd
 import webbrowser
 import concurrent.futures
 import re
+from typing import Union
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -12,6 +14,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from pydantic import BaseModel, Field
 from difflib import SequenceMatcher
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 # 导入日志系统
 from logger import logger
@@ -59,7 +63,7 @@ class SchoolReport(BaseModel):
     language_req: str = Field(description="Waiver Verdict AND Specific Score Requirements")
     funding_policy: str = Field(description="Details on Stipend, Tuition Waiver, and Health Insurance")
     best_match_professor: str = Field(description="Professor name or 'Not found'")
-    research_fit_score: int = Field(description="0-100 score (Must be multiple of 5)")
+    research_fit_score: Union[int, str] = Field(description="0-100 score (Must be multiple of 5)") 
     match_reason: str = Field(description="Detailed reason for fit")
     red_flags: str = Field(description="Potential risks formatted as numbered list")
     source_url: str = Field(description="Verification URL")
@@ -224,46 +228,110 @@ def get_prompts(language="English", major="Interdisciplinary", target_countries=
     analyzer_prompt = ChatPromptTemplate.from_template(analyzer_template)
     return recommender_prompt, analyzer_prompt
 
-# --- 6. 通用去重 ---
+# --- 6. 通用去重  ---
 def deduplicate_school_list(llm, raw_list):
     logger.info(f"开始去重处理: 输入 {len(raw_list)} 条记录")
-    print(f"\n[System] 正在进行去重 (输入: {len(raw_list)})...")  # 保持原有输出
-    unique_schools = {}
+    print(f"\n[System] 正在进行智能去重 (输入: {len(raw_list)})...")
     
-    def get_key(name):
-        clean = name.lower().strip()
-        clean = re.sub(r'[^\w\s]', '', clean)
-        clean = clean.replace("univ ", "university ").replace("inst ", "institute ")
-        clean = clean.replace("tech ", "technology ")
-        clean = " ".join(clean.split())
-        return clean
-
-    # 先标准化输入，防止崩溃
+    # === 1. 名称标准化 (关键修复) ===
     normalized_list = []
-    for item in raw_list:
-        if isinstance(item, str):
-            normalized_list.append({'name': item, 'source': 'AI Recommendation'})
-        elif isinstance(item, dict):
-            if 'name' not in item and 'school_name' in item:
-                item['name'] = item['school_name']
-            normalized_list.append(item)
-
-    for item in normalized_list:
-        if "AI" not in item['source']:
-            key = get_key(item['name'])
-            unique_schools[key] = item
-            
-    ai_added = 0
-    for item in normalized_list:  # 修复：使用 normalized_list 而不是 raw_list
-        if "AI" in item['source']:
-            key = get_key(item['name'])
-            if key not in unique_schools:
-                unique_schools[key] = item
-                ai_added += 1
     
-    final = list(unique_schools.values())
-    logger.info(f"去重完成: 输出 {len(final)} 条记录")
-    return final
+    # 定义 LLM 翻译链
+    norm_prompt = ChatPromptTemplate.from_template(
+        "What is the official English name of the university '{name}'? "
+        "Output ONLY the full English name. No acronyms, no explanations."
+    )
+    norm_chain = norm_prompt | llm | StrOutputParser()
+
+    # 判断是否需要标准化的辅助函数
+    def needs_normalization(name):
+        n = str(name).strip()
+        # 1. 如果包含中文，必须翻译！(这是解决你问题的关键)
+        if re.search(r'[\u4e00-\u9fa5]', n):
+            return True
+        # 2. 如果是简短的英文 (缩写)，需要展开
+        # 例如 "SUSS" (4 chars), "MIT" (3 chars)
+        if len(n) < 15 and re.match(r'^[A-Za-z0-9\s\(\)\.]+$', n):
+            return True
+        return False
+
+    print("[System] 正在标准化手动输入的学校名称...")
+    
+    for item in raw_list:
+        # 复制对象，防止修改原数据
+        entry = item.copy() if isinstance(item, dict) else {'name': item, 'source': 'AI Recommendation'}
+        if 'name' not in entry and 'school_name' in entry:
+            entry['name'] = entry['school_name']
+
+        name = entry['name']
+        
+        # 只处理“手动目标”，AI 推荐的通常已经是标准英文
+        if "AI" not in entry.get('source', '') and needs_normalization(name):
+            try:
+                print(f"    [Trans] 正在翻译/标准化: {name} ...")
+                # 调用 LLM
+                full_name = norm_chain.invoke({"name": name}).strip()
+                # 清洗一下 LLM 可能返回的引号
+                full_name = full_name.replace('"', '').replace("'", "").replace(".", "")
+                
+                print(f"    结果: {full_name}")
+                entry['name'] = full_name # 更新为英文名
+            except Exception as e:
+                logger.error(f"标准化失败 {name}: {e}")
+                # 失败了也没办法，只能保留原名
+        
+        normalized_list.append(entry)
+
+    # === 2. 定义清洗函数 (保持之前的核弹级清洗) ===
+    def clean_name_for_compare(name):
+        if not name: return ""
+        n = str(name).lower()
+        # 去除括号
+        n = re.sub(r'[\(\[\{（【].*?[\)\]\}）】]', '', n)
+        # 去除标点
+        n = re.sub(r'[^\w\u4e00-\u9fa5]', '', n)
+        # 缩写
+        n = n.replace("technological", "tech").replace("technology", "tech")
+        # 去除通用词
+        for w in ["university", "univ", "college", "institute", "inst", "of", "the", "and", "&"]:
+            n = n.replace(w, "")
+        return n.strip()
+
+    # === 3. 执行去重 ===
+    # 排序：手动在前，AI 在后
+    normalized_list.sort(key=lambda x: 0 if "AI" not in x.get('source', '') else 1)
+
+    unique_list = []
+    for current in normalized_list:
+        is_duplicate = False
+        curr_clean = clean_name_for_compare(current['name'])
+        
+        for existing in unique_list:
+            exist_clean = clean_name_for_compare(existing['name'])
+            
+            # A: 完全相等
+            if curr_clean == exist_clean:
+                is_duplicate = True
+                break
+            # B: 相互包含 (防误判)
+            if len(curr_clean) > 4 and len(exist_clean) > 4:
+                if curr_clean in exist_clean or exist_clean in curr_clean:
+                    is_duplicate = True
+                    break
+            # C: 相似度
+            ratio = SequenceMatcher(None, curr_clean, exist_clean).ratio()
+            if ratio > 0.82: 
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            unique_list.append(current)
+        else:
+            logger.debug(f"剔除重复项: {current['name']}")
+            print(f"[Dedup] 剔除重复项: {current['name']}")
+
+    print(f"[System] 去重完成。保留: {len(unique_list)} (原始: {len(raw_list)})")
+    return unique_list
 
 # --- 7. 核心功能 ---
 def get_academic_papers(school_name, interest_en, sch_engine, major_en="Computer Science"):
@@ -278,7 +346,21 @@ def get_academic_papers(school_name, interest_en, sch_engine, major_en="Computer
         
         query = f"{school_name} {short_major} {interest_en}"
         logger.debug(f"学术论文搜索查询: {query}")
-        results = sch_engine.search_paper(query=query, limit=3, fields=['title', 'abstract', 'venue', 'year', 'authors'])
+        
+        # 设置超时：最多等待 10 秒
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                sch_engine.search_paper, 
+                query=query, 
+                limit=3, 
+                fields=['title', 'abstract', 'venue', 'year', 'authors']
+            )
+            try:
+                results = future.result(timeout=10)  # 10秒超时
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Semantic Scholar 搜索超时 (10s): {school_name}")
+                return "Academic search timeout."
         
         context = ""
         if not results: 
@@ -291,7 +373,7 @@ def get_academic_papers(school_name, interest_en, sch_engine, major_en="Computer
         return context
     except Exception as e: 
         logger.error(f"学术论文搜索失败: {str(e)[:100]}")
-        return f"Academic search error: {str(e)[:100]}"
+        return f"Academic search error."
 
 def get_ai_recommendations(llm, recommender_prompt, profile, manual_list, count, language="English"):
     logger.info(f"开始生成 AI 推荐: 目标数量 {count}")
@@ -317,6 +399,9 @@ def get_ai_recommendations(llm, recommender_prompt, profile, manual_list, count,
 def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch_engine, 
                    interest, major, highest_school, current_degree, english_test, search_keywords,
                    target_countries=None, target_degree="PhD", major_en=None, keywords_en=None):
+    # === 重试配置 ===
+    MAX_RETRIES = 3  # 最多重试 3 次
+    BASE_DELAY = 2   # 基础等待 2 秒
     logger.info(f"开始分析学校: {school_name}")
     msg = f"Scouting: {school_name}"
     print(msg)  # 保持原有输出
@@ -330,7 +415,6 @@ def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch
         # 使用预翻译的结果，如果没有传入则回退到翻译
         search_major_en = major_en if major_en else ensure_english_term(llm, major)
         raw_keywords = search_keywords if search_keywords else interest
-        # 使用预翻译的结果，如果没有传入则回退到翻译
         search_keywords_en = keywords_en if keywords_en else ensure_english_term(llm, raw_keywords)
         
         # 中文意图检测
@@ -367,45 +451,98 @@ def analyze_school(school_name, source_type, llm, analyzer_prompt, web_tool, sch
             elif "IELTS" in english_test: user_test = "IELTS minimum score"
             elif "TOEFL" in english_test: user_test = "TOEFL minimum score"
         
-        web_query = (
-            f"{refined_name} {search_major_en} {final_keywords} {search_degree_type} admission "
-            f"language waiver {user_test} "
-            f"{lang_suffix} "
-            f"{funding_query_part} " 
-            f"Official {search_degree_type} Program Handbook (PDF)"
-            f"application deadline"
-            f"{search_degree_type} student funding package stipend amount tuition waiver health insurance assistantship handbook"
-        )
-        logger.debug(f"构建搜索查询: {web_query[:100]}...")
+        try:
+            web_query = (
+                f"{refined_name} {search_major_en} {search_degree_type} " 
+                f"International Admission requirements{user_test} "
+                f"funding package stipend assistantship "                 
+                f"full tuition waiver health insurance benefits "         
+                f"application deadline Fall "                             
+                f"Student Handbook PDF "                                  
+                f"{lang_suffix}" 
+            )
+        except Exception as e:
+            logger.error(f"参数准备阶段失败 {school_name}: {e}")
+            return None
         
-        web_results = web_tool.invoke(web_query)
-        web_context = "\n".join([f"Src: {res['url']}\nTxt: {res['content']}" for res in web_results])
-        
-        academic_context = get_academic_papers(school_name, search_keywords_en, sch_engine, search_major_en)
+        # === 2. 核心执行阶段 (带重试机制) ===
+        # 只要 搜索、论文、LLM 任意一个环节报错，都会触发重试
+        for attempt in range(MAX_RETRIES):
+            try:
+                if attempt > 0:
+                    print(f"    [Retry] {school_name} 第 {attempt+1} 次重试...")
+                
+                # --- A. 联网搜索 (修复版: 增加容错) ---
+                try:
+                    web_results = web_tool.invoke(web_query)
+                    if isinstance(web_results, list) and len(web_results) > 0:
+                        valid_results = [res for res in web_results if isinstance(res, dict)]
+                        if valid_results:
+                            web_context = "\n".join([f"Src: {res.get('url', 'N/A')}\nTxt: {res.get('content', '')}" for res in valid_results])
+                        else:
+                            web_context = "Search returned list but no valid dicts."
+                    elif isinstance(web_results, str):
+                        web_context = f"Search Engine Message: {web_results}"
+                    else:
+                        web_context = "No search results found."
+                except Exception as e:
+                    logger.warning(f"Web search parsing failed: {e}")
+                    web_context = "Web search failed."
+            
+                # --- B. 学术搜索 ---
+                # 注意：这一段必须在 try 内部，缩进要对齐
+                academic_context = "Academic search skipped/failed."
+                try:
+                    academic_context = get_academic_papers(school_name, search_keywords_en, sch_engine, search_major_en)
+                except Exception:
+                    pass 
 
-        is_alumni = check_is_alumni(school_name, highest_school)
-        is_alumni_str = "True" if is_alumni else "False"
-        logger.debug(f"校友检测结果: {school_name} -> {is_alumni_str}")
+                # --- C. 准备 Prompt ---
+                is_alumni = check_is_alumni(school_name, highest_school)
+                is_alumni_str = "True" if is_alumni else "False"
 
-        parser = JsonOutputParser(pydantic_object=SchoolReport)
-        chain = analyzer_prompt | llm | parser
-        
-        result = chain.invoke({
-            "school_name": school_name, "interest": interest, 
-            "web_context": web_context, "academic_context": academic_context,
-            "highest_school": highest_school, "current_degree": current_degree, 
-            "english_test": english_test,
-            "is_alumni_str": is_alumni_str,
-            "format_instructions": parser.get_format_instructions()
-        })
-        
-        result['source'] = source_type
-        if not result.get('source_url'): result['source_url'] = "N/A"
-        logger.info(f"学校分析完成: {school_name} (匹配分: {result.get('research_fit_score', 'N/A')})")
-        return result
+                parser = JsonOutputParser(pydantic_object=SchoolReport)
+                chain = analyzer_prompt | llm | parser
+                
+                # --- D. 调用 LLM ---
+                result = chain.invoke({
+                    "school_name": school_name, "interest": interest, 
+                    "web_context": web_context, "academic_context": academic_context,
+                    "highest_school": highest_school, "current_degree": current_degree, 
+                    "english_test": english_test,
+                    "is_alumni_str": is_alumni_str,
+                    "format_instructions": parser.get_format_instructions()
+                })
+                
+                # 成功！
+                result['source'] = source_type
+                if not result.get('source_url'): result['source_url'] = "N/A"
+                logger.info(f"分析成功: {school_name} (匹配分: {result.get('research_fit_score', 'N/A')})")
+                return result
+
+            except Exception as e:
+                # 这是对应 for 循环内部 try 的 except
+                logger.warning(f"{school_name} 分析异常 (尝试 {attempt+1}/{MAX_RETRIES}): {e}")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(BASE_DELAY * (2 ** attempt))
+                else:
+                    # === 3. 最终失败兜底 ===
+                    print(f"    {school_name} Failed Completely: {e}")
+                    return {
+                        "school_name": school_name,
+                        "source": source_type,
+                        "research_fit_score": 0,
+                        "language_req": "System Error (Analysis Failed)",
+                        "funding_policy": "N/A",
+                        "best_match_professor": "N/A",
+                        "match_reason": "Analysis failed after retries due to network or API limits.",
+                        "red_flags": f"System Error: {str(e)}",
+                        "source_url": "N/A",
+                        "application_deadline": "Unknown"
+                    }
     except Exception as e:
-        logger.error(f"学校分析失败: {school_name} - {e}")
-        print(f"    {school_name} Failed: {e}")  # 保持原有输出
+        # 参数准备阶段的兜底
+        logger.error(f"严重错误 {school_name}: {e}")
         return None
 
 # --- HTML Report Generators ---
